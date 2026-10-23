@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.6";
+    private static final String APP_VERSION = "1.0.7";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -543,7 +543,7 @@ public final class OrcaBemApp extends JFrame {
         String budgetNote = planned.signum() == 0 ? "Defina limites por categoria" : percent(expense, planned) + " de " + money(planned) + " planejado";
         JPanel stats = new JPanel(new GridLayout(1, 4, 12, 0)); stats.setOpaque(false); stats.setPreferredSize(new Dimension(1000, 132)); stats.setMaximumSize(new Dimension(Integer.MAX_VALUE, 132));
         stats.add(statCard("SOBROU DEPOIS DOS GASTOS", money(balance), monthName(selectedMonth) + " · receitas menos despesas", balance.signum() >= 0 ? GREEN : RED));
-        stats.add(statCard("RECEITAS", money(income), "Entradas neste mês", GREEN));
+        stats.add(statCard("RECEITAS DISPONÍVEIS", money(income), "Entradas menos aportes financiados por receita", GREEN));
         stats.add(statCard("DESPESAS", money(expense), expensesByCategory(selectedMonth).size() + " categorias", RED));
         stats.add(statCard("ORÇAMENTO RESTANTE", money(budgetRemaining), budgetNote, budgetRemaining.signum() >= 0 ? PURPLE : RED));
         content.add(stats); content.add(Box.createVerticalStrut(14));
@@ -656,7 +656,7 @@ public final class OrcaBemApp extends JFrame {
         JPanel controls = rangeControls(cashFlowRange, range -> { cashFlowRange = range; refreshPage(); });
         controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 9, 3)); legend.setOpaque(false);
-        JLabel incomeLegend = new JLabel("● Receitas"); incomeLegend.setForeground(GREEN); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        JLabel incomeLegend = new JLabel("● Receitas disponíveis"); incomeLegend.setForeground(GREEN); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         JLabel expenseLegend = new JLabel("● Despesas"); expenseLegend.setForeground(PURPLE); expenseLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         legend.add(incomeLegend); legend.add(expenseLegend); card.add(header, BorderLayout.NORTH);
         card.add(legend, BorderLayout.SOUTH);
@@ -784,8 +784,8 @@ public final class OrcaBemApp extends JFrame {
         }
         BigDecimal income = total(selectedMonth, Transaction.Type.INCOME);
         BigDecimal expense = total(selectedMonth, Transaction.Type.EXPENSE);
-        if (income.signum() > 0 && expense.compareTo(income) > 0) out.add("Suas despesas superam as receitas em " + money(expense.subtract(income)) + " neste mês.");
-        else if (income.signum() > 0 && expense.compareTo(income) <= 0) out.add("Você guardou " + percent(expense.signum() == 0 ? BigDecimal.ZERO : income.subtract(expense), income) + " das receitas deste mês.");
+        if (income.signum() > 0 && expense.compareTo(income) > 0) out.add("Suas despesas superam as receitas disponíveis após aportes em " + money(expense.subtract(income)) + " neste mês.");
+        else if (income.signum() > 0 && expense.compareTo(income) <= 0) out.add("Depois das despesas, restaram " + percent(income.subtract(expense), income) + " das receitas disponíveis após aportes neste mês.");
         YearMonth nowMonth = YearMonth.now();
         if (!selectedMonth.isAfter(nowMonth)) {
             int day = selectedMonth.equals(nowMonth) ? LocalDate.now().getDayOfMonth() : selectedMonth.lengthOfMonth();
@@ -861,12 +861,12 @@ public final class OrcaBemApp extends JFrame {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 9));
         card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(15, 18, 15, 18)));
         card.add(sectionHeading("Histórico de investimentos", "Movimentos deste perfil"), BorderLayout.NORTH);
-        String[] columns = {"Data", "Movimento", "Observação", "Valor", "Saldo após"};
+        String[] columns = {"Data", "Movimento", "Origem", "Observação", "Valor", "Saldo após"};
         DefaultTableModel model = new DefaultTableModel(columns, 0) { @Override public boolean isCellEditable(int row, int column) { return false; } };
         Map<String, BigDecimal> balancesAfter = investmentStore.balancesAfterEach();
         for (InvestmentStore.Movement movement : investmentStore.movements()) {
             String signed = (movement.type() == InvestmentStore.Type.APORTE ? "+ " : "− ") + money(movement.amount());
-            model.addRow(new Object[]{movement.date().format(DATE_BR), movement.label(), movement.note().isBlank() ? "—" : movement.note(), signed, money(balancesAfter.getOrDefault(movement.id(), BigDecimal.ZERO))});
+            model.addRow(new Object[]{movement.date().format(DATE_BR), movement.label(), movement.sourceLabel(), movement.note().isBlank() ? "—" : movement.note(), signed, money(balancesAfter.getOrDefault(movement.id(), BigDecimal.ZERO))});
         }
         JTable table = new JTable(model); table.setRowHeight(36); table.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         table.setForeground(INK); table.setBackground(CARD); table.setGridColor(BORDER); table.setShowVerticalLines(false); table.setFillsViewportHeight(true);
@@ -884,13 +884,20 @@ public final class OrcaBemApp extends JFrame {
     private void investmentMovementDialog(InvestmentStore.Type movementType) {
         boolean contribution = movementType == InvestmentStore.Type.APORTE;
         String actionName = contribution ? "Aporte" : "Resgate";
-        JDialog dialog = new JDialog(this, "Registrar " + actionName.toLowerCase(PT), true); dialog.setSize(470, 340); dialog.setLocationRelativeTo(this);
+        JDialog dialog = new JDialog(this, "Registrar " + actionName.toLowerCase(PT), true); dialog.setSize(500, contribution ? 390 : 340); dialog.setLocationRelativeTo(this);
         JPanel form = new JPanel(new GridLayout(0, 2, 12, 12)); form.setBackground(CARD); form.setBorder(BorderFactory.createEmptyBorder(22, 24, 14, 24));
         JTextField date = new JTextField(LocalDate.now().format(DATE_BR)); styleInput(date); installDateInputFilter(date);
         JTextField amount = new JTextField(); styleInput(amount); installCurrencyFormatting(amount);
         JTextField note = new JTextField(); styleInput(note);
-        addField(form, "Data (dd/MM/aaaa)", date); addField(form, "Valor (R$)", amount); addField(form, "Observação (opcional)", note);
-        JLabel help = new JLabel(contribution ? "O valor será somado ao saldo investido." : "O resgate não pode superar o saldo disponível.");
+        javax.swing.JComboBox<String> source = contribution ? new ThemeComboBox<>(new String[]{"Receita registrada", "Aporte externo (não é receita)"}) : null;
+        if (source != null) styleInput(source);
+        addField(form, "Data (dd/MM/aaaa)", date); addField(form, "Valor (R$)", amount);
+        if (contribution) addField(form, "Origem do aporte", source);
+        addField(form, "Observação (opcional)", note);
+        JLabel help = new JLabel(contribution ? "Será descontado das receitas registradas neste mês." : "O resgate não pode superar o saldo disponível.");
+        if (contribution) source.addActionListener(e -> help.setText(source.getSelectedIndex() == 0
+                ? "Será descontado das receitas registradas neste mês."
+                : "Aporte externo: não altera o total de receitas."));
         help.setForeground(MUTED); help.setFont(new Font("Segoe UI", Font.PLAIN, 10)); form.add(new JLabel("")); form.add(help);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8)); buttons.setBackground(CARD);
         JButton cancel = secondaryButton("Cancelar"); cancel.addActionListener(e -> dialog.dispose());
@@ -900,7 +907,15 @@ public final class OrcaBemApp extends JFrame {
                 LocalDate parsedDate = LocalDate.parse(date.getText().trim(), DATE_BR);
                 BigDecimal parsedAmount = parseMoney(amount.getText());
                 if (parsedAmount.signum() <= 0) throw new IllegalArgumentException("Digite um valor maior que zero.");
-                investmentStore.add(parsedDate, movementType, parsedAmount, note.getText());
+                InvestmentStore.Source selectedSource = contribution && source.getSelectedIndex() == 0
+                        ? InvestmentStore.Source.RECEITA : InvestmentStore.Source.EXTERNO;
+                if (selectedSource == InvestmentStore.Source.RECEITA) {
+                    YearMonth month = YearMonth.from(parsedDate);
+                    BigDecimal availableIncome = recordedIncome(month).subtract(investmentStore.incomeFundedContributions(month));
+                    if (parsedAmount.compareTo(availableIncome) > 0)
+                        throw new IllegalArgumentException("O aporte excede as receitas registradas ainda disponíveis neste mês (" + money(availableIncome.max(BigDecimal.ZERO)) + "). Escolha aporte externo se o valor veio de outra fonte.");
+                }
+                investmentStore.add(parsedDate, movementType, parsedAmount, note.getText(), selectedSource);
                 dialog.dispose(); refreshPage();
             } catch (Exception ex) {
                 String message = ex.getMessage() == null ? "Confira a data e o valor." : ex.getMessage();
@@ -1259,7 +1274,13 @@ public final class OrcaBemApp extends JFrame {
     }
 
     private BigDecimal total(YearMonth month, Transaction.Type type) {
-        return transactions.stream().filter(t -> YearMonth.from(t.getDate()).equals(month) && t.getType() == type).map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal recorded = transactions.stream().filter(t -> YearMonth.from(t.getDate()).equals(month) && t.getType() == type).map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return type == Transaction.Type.INCOME ? recorded.subtract(investmentStore.incomeFundedContributions(month)) : recorded;
+    }
+
+    private BigDecimal recordedIncome(YearMonth month) {
+        return transactions.stream().filter(t -> YearMonth.from(t.getDate()).equals(month) && t.getType() == Transaction.Type.INCOME)
+                .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private Map<String, BigDecimal> expensesByCategory(YearMonth month) {

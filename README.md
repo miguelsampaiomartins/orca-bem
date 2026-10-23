@@ -11,7 +11,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite definir limites mensais por categoria e comparar o limite com o gasto realizado, com alertas em linguagem simples quando está perto ou foi ultrapassado.
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
-- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
+- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. Cada aporte pode usar receita registrada (reduz as receitas disponíveis daquele mês) ou ser externo (não entra como receita). O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
 - Permite criar, alternar e excluir perfis locais independentes pelos botões **Criar perfil** e **Gerenciar perfis** abaixo do seletor. A janela de gerenciamento abre ampliada; a exclusão pede confirmação e remove os dados do perfil inativo. O perfil ativo e o perfil Pessoal (que conserva os dados legados) são protegidos.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
