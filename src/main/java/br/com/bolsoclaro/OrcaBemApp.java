@@ -65,12 +65,20 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private final Path dataDir = Path.of(System.getProperty("user.home"), ".bolso-claro");
-    private final Path transactionsFile = dataDir.resolve("transacoes.csv");
+    private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
+    private Path activeDataDir;
+    private Path transactionsFile;
     private final List<Transaction> transactions = new ArrayList<>();
+    private final ProfileStore profileStore;
+    private ProfileStore.Profile activeProfile;
     private BudgetStore budgetStore;
     private CategoryStore categoryStore;
     private SavingsGoalStore savingsGoalStore;
+    private InvestmentStore investmentStore;
+    private javax.swing.JComboBox<ProfileStore.Profile> profileChooser;
+    private boolean suppressProfileSelection;
+    private boolean cashFlowAllTime;
+    private boolean investmentAllTime = true;
     private YearMonth selectedMonth = YearMonth.now();
     private String currentPage = "dashboard";
     private final JPanel pageHost = new JPanel(new CardLayout());
@@ -82,10 +90,8 @@ public final class OrcaBemApp extends JFrame {
 
     public OrcaBemApp() throws IOException {
         super("OrçaBem — seu dinheiro em foco");
-        transactions.addAll(CsvStore.load(transactionsFile));
-        budgetStore = new BudgetStore(dataDir.resolve("orcamentos.properties"));
-        categoryStore = new CategoryStore(dataDir.resolve("categorias.properties"));
-        savingsGoalStore = new SavingsGoalStore(dataDir.resolve("metas.properties"));
+        profileStore = new ProfileStore(dataDir);
+        loadProfile(profileStore.activeProfile());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1040, 700));
         setSize(1340, 860);
@@ -96,6 +102,56 @@ public final class OrcaBemApp extends JFrame {
         add(buildSidebar(), BorderLayout.WEST);
         add(buildMain(), BorderLayout.CENTER);
         refreshPage();
+    }
+
+    private void loadProfile(ProfileStore.Profile profile) throws IOException {
+        Path profileDirectory = profileStore.directory(profile);
+        Path profileTransactions = profileDirectory.resolve("transacoes.csv");
+        List<Transaction> loadedTransactions = CsvStore.load(profileTransactions);
+        BudgetStore loadedBudgets = new BudgetStore(profileDirectory.resolve("orcamentos.properties"));
+        CategoryStore loadedCategories = new CategoryStore(profileDirectory.resolve("categorias.properties"));
+        SavingsGoalStore loadedGoals = new SavingsGoalStore(profileDirectory.resolve("metas.properties"));
+        InvestmentStore loadedInvestments = new InvestmentStore(profileDirectory.resolve("investimentos.properties"));
+        activeProfile = profile;
+        activeDataDir = profileDirectory;
+        transactionsFile = profileTransactions;
+        transactions.clear(); transactions.addAll(loadedTransactions);
+        budgetStore = loadedBudgets; categoryStore = loadedCategories; savingsGoalStore = loadedGoals; investmentStore = loadedInvestments;
+    }
+
+    private void activateProfile(ProfileStore.Profile profile) {
+        ProfileStore.Profile previous = activeProfile;
+        try {
+            profileStore.setActive(profile.id());
+            loadProfile(profile);
+            selectedMonth = YearMonth.now(); currentPage = "dashboard";
+            refreshProfileChooser(); refreshPage();
+        } catch (Exception ex) {
+            if (previous != null) {
+                try { profileStore.setActive(previous.id()); } catch (IOException ignored) { }
+                profileChooser.setSelectedItem(previous);
+            }
+            JOptionPane.showMessageDialog(this, "Não foi possível abrir esse perfil: " + ex.getMessage(), "Perfil indisponível", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void createProfileDialog() {
+        String name = JOptionPane.showInputDialog(this, "Nome para identificar os dados deste perfil:", "Criar perfil", JOptionPane.PLAIN_MESSAGE);
+        if (name == null) return;
+        try {
+            ProfileStore.Profile profile = profileStore.create(name);
+            activateProfile(profile);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Não foi possível criar o perfil", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void refreshProfileChooser() {
+        if (profileChooser == null) return;
+        suppressProfileSelection = true;
+        profileChooser.setModel(new DefaultComboBoxModel<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new)));
+        profileChooser.setSelectedItem(activeProfile);
+        suppressProfileSelection = false;
     }
 
     private JPanel buildSidebar() {
@@ -109,21 +165,35 @@ public final class OrcaBemApp extends JFrame {
         JLabel brandName = new JLabel("OrçaBem"); brandName.setFont(new Font("Segoe UI", Font.BOLD, 15)); brandName.setForeground(INK);
         JLabel brandTagline = new JLabel("SEU DINHEIRO, BEM PLANEJADO"); brandTagline.setFont(new Font("Segoe UI", Font.BOLD, 8)); brandTagline.setForeground(ACCENT);
         brandCopy.add(brandName); brandCopy.add(Box.createVerticalStrut(3)); brandCopy.add(brandTagline); brand.add(mark); brand.add(brandCopy);
-        brand.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(brand); sidebar.add(Box.createVerticalStrut(31));
-        addNav("dashboard", "⌂", "Visão geral");
-        addNav("transactions", "⇄", "Lançamentos");
-        addNav("budgets", "▤", "Orçamentos");
-        addNav("categories", "◈", "Categorias");
-        addNav("insights", "✧", "Insights");
-        addNav("privacy", "◉", "Dados e privacidade");
+        brand.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(brand); sidebar.add(Box.createVerticalStrut(22));
+        JLabel profileLabel = new JLabel("PERFIL ATIVO"); profileLabel.setFont(new Font("Segoe UI", Font.BOLD, 9)); profileLabel.setForeground(MUTED);
+        profileLabel.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(profileLabel); sidebar.add(Box.createVerticalStrut(6));
+        profileChooser = new ThemeComboBox<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new));
+        profileChooser.setSelectedItem(activeProfile); profileChooser.setPreferredSize(new Dimension(150, 35)); profileChooser.setMaximumSize(new Dimension(150, 35)); styleInput(profileChooser);
+        profileChooser.addActionListener(e -> {
+            Object selected = profileChooser.getSelectedItem();
+            if (!suppressProfileSelection && selected instanceof ProfileStore.Profile profile && activeProfile != null && !profile.id().equals(activeProfile.id())) activateProfile(profile);
+        });
+        JButton newProfile = secondaryButton("+"); newProfile.setToolTipText("Criar perfil independente"); newProfile.setPreferredSize(new Dimension(34, 35));
+        newProfile.addActionListener(e -> createProfileDialog());
+        JPanel profileRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); profileRow.setOpaque(false); profileRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        profileRow.add(profileChooser); profileRow.add(newProfile); sidebar.add(profileRow); sidebar.add(Box.createVerticalStrut(22));
+        addNav("dashboard", "Visão geral");
+        addNav("transactions", "Lançamentos");
+        addNav("budgets", "Orçamentos");
+        addNav("investments", "Investimentos");
+        addNav("categories", "Categorias");
+        addNav("insights", "Insights");
+        addNav("privacy", "Dados e privacidade");
         sidebar.add(Box.createVerticalGlue());
         JLabel privateMark = new JLabel("•", SwingConstants.CENTER); privateMark.setForeground(GREEN); privateMark.setFont(new Font("Segoe UI", Font.BOLD, 26));
         privateMark.setToolTipText("Privado por design · guardado neste computador"); privateMark.setAlignmentX(Component.CENTER_ALIGNMENT); sidebar.add(privateMark);
         return sidebar;
     }
 
-    private void addNav(String key, String glyph, String accessibleName) {
-        JButton button = new ThemeButton(glyph + "    " + accessibleName, SIDEBAR, new Color(31, 57, 47), SIDEBAR);
+    private void addNav(String key, String accessibleName) {
+        JButton button = new ThemeButton(accessibleName, SIDEBAR, new Color(31, 57, 47), SIDEBAR);
+        button.setIcon(new SidebarIcon(key)); button.setIconTextGap(12);
         button.setHorizontalAlignment(SwingConstants.LEFT); button.setFocusPainted(false); button.setBorderPainted(false); button.setOpaque(false);
         button.setFont(new Font("Segoe UI", Font.BOLD, 12)); button.setPreferredSize(new Dimension(198, 44)); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         button.setAlignmentX(Component.LEFT_ALIGNMENT); button.setToolTipText(accessibleName); button.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 8));
@@ -156,12 +226,13 @@ public final class OrcaBemApp extends JFrame {
 
     private void refreshPage() {
         monthLabel.setText(monthName(selectedMonth));
-        pageTitle.setText(switch (currentPage) { case "transactions" -> "Movimentações"; case "budgets" -> "Orçamentos"; case "categories" -> "Categorias"; case "insights" -> "Insights"; case "privacy" -> "Dados e privacidade"; default -> "Seu dinheiro em foco."; });
+        pageTitle.setText(switch (currentPage) { case "transactions" -> "Movimentações"; case "budgets" -> "Orçamentos"; case "investments" -> "Investimentos"; case "categories" -> "Categorias"; case "insights" -> "Insights"; case "privacy" -> "Dados e privacidade"; default -> "Seu dinheiro em foco."; });
         eyebrowLabel.setText("SEU RESUMO FINANCEIRO   /   " + monthName(selectedMonth).toUpperCase(PT));
         updateNavStyles();
         pageHost.removeAll();
         if (currentPage.equals("transactions")) pageHost.add(buildTransactionsPage());
         else if (currentPage.equals("budgets")) pageHost.add(buildBudgetsPage());
+        else if (currentPage.equals("investments")) pageHost.add(buildInvestmentsPage());
         else if (currentPage.equals("categories")) pageHost.add(buildCategoriesPage());
         else if (currentPage.equals("insights")) pageHost.add(buildInsightsPage());
         else if (currentPage.equals("privacy")) pageHost.add(buildPrivacyPage());
@@ -297,16 +368,64 @@ public final class OrcaBemApp extends JFrame {
 
     private JPanel trendCard() {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 6)); card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(17, 18, 11, 14)));
-        JPanel header = new JPanel(new BorderLayout()); header.setOpaque(false);
-        header.add(sectionHeading("Fluxo de caixa ao longo do tempo", "Seis meses de entradas e saídas"), BorderLayout.WEST);
+        JPanel header = new JPanel(); header.setOpaque(false); header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.add(sectionHeading("Fluxo de caixa ao longo do tempo", cashFlowAllTime ? "Todo o histórico registrado" : "Seis meses de entradas e saídas"));
+        JPanel controls = rangeControls(cashFlowAllTime,
+                () -> { cashFlowAllTime = false; refreshPage(); },
+                () -> { cashFlowAllTime = true; refreshPage(); });
+        controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 9, 3)); legend.setOpaque(false);
         JLabel incomeLegend = new JLabel("● Receitas"); incomeLegend.setForeground(GREEN); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         JLabel expenseLegend = new JLabel("● Despesas"); expenseLegend.setForeground(PURPLE); expenseLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        legend.add(incomeLegend); legend.add(expenseLegend); header.add(legend, BorderLayout.EAST); card.add(header, BorderLayout.NORTH);
-        List<YearMonth> months = new ArrayList<>();
-        for (int i = 5; i >= 0; i--) months.add(selectedMonth.minusMonths(i));
+        legend.add(incomeLegend); legend.add(expenseLegend); card.add(header, BorderLayout.NORTH);
+        card.add(legend, BorderLayout.SOUTH);
+        List<YearMonth> months = cashFlowMonths();
         TrendChart chart = new TrendChart(); chart.setCashFlowData(months, m -> total(m, Transaction.Type.INCOME), m -> total(m, Transaction.Type.EXPENSE));
         card.add(chart, BorderLayout.CENTER); return card;
+    }
+
+    private JPanel rangeControls(boolean allTime, Runnable sixMonthsAction, Runnable allTimeAction) {
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0)); controls.setOpaque(false);
+        JButton recent = rangeButton("6 meses", !allTime, sixMonthsAction);
+        JButton all = rangeButton("Todo", allTime, allTimeAction);
+        controls.add(recent); controls.add(all); return controls;
+    }
+
+    private JButton rangeButton(String label, boolean selected, Runnable action) {
+        JButton button = styleButton(label, selected ? ACCENT : CARD_ALT, selected ? new Color(30, 35, 28) : INK, selected ? new Color(255, 207, 131) : new Color(39, 72, 59));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 9)); button.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        button.addActionListener(e -> action.run()); return button;
+    }
+
+    private List<YearMonth> cashFlowMonths() {
+        if (!cashFlowAllTime || transactions.isEmpty()) return recentMonths(selectedMonth);
+        YearMonth first = transactions.stream().map(t -> YearMonth.from(t.getDate())).min(YearMonth::compareTo).orElse(selectedMonth);
+        YearMonth last = transactions.stream().map(t -> YearMonth.from(t.getDate())).max(YearMonth::compareTo).orElse(selectedMonth);
+        if (selectedMonth.isAfter(last)) last = selectedMonth;
+        return monthsBetween(first, last);
+    }
+
+    private List<YearMonth> investmentMonths() {
+        List<InvestmentStore.Movement> movements = investmentStore.movements();
+        if (!investmentAllTime || movements.isEmpty()) return recentMonths(YearMonth.now());
+        YearMonth first = movements.stream().map(m -> YearMonth.from(m.date())).min(YearMonth::compareTo).orElse(YearMonth.now());
+        YearMonth last = movements.stream().map(m -> YearMonth.from(m.date())).max(YearMonth::compareTo).orElse(YearMonth.now());
+        if (YearMonth.now().isAfter(last)) last = YearMonth.now();
+        return monthsBetween(first, last);
+    }
+
+    private List<YearMonth> recentMonths(YearMonth end) {
+        List<YearMonth> months = new ArrayList<>();
+        for (int i = 5; i >= 0; i--) months.add(end.minusMonths(i));
+        return months;
+    }
+
+    private List<YearMonth> monthsBetween(YearMonth first, YearMonth last) {
+        List<YearMonth> months = new ArrayList<>();
+        YearMonth month = first;
+        while (!month.isAfter(last) && months.size() < 2400) { months.add(month); month = month.plusMonths(1); }
+        if (months.isEmpty()) return recentMonths(last);
+        return months;
     }
 
     private JPanel analysisCard() {
@@ -402,6 +521,104 @@ public final class OrcaBemApp extends JFrame {
         page.add(scroll, BorderLayout.CENTER); return page;
     }
 
+    private JPanel buildInvestmentsPage() {
+        JPanel page = new JPanel(new BorderLayout(0, 14)); page.setOpaque(false);
+        JPanel content = new JPanel(); content.setOpaque(false); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        JPanel intro = new JPanel(); intro.setOpaque(false); intro.setLayout(new BoxLayout(intro, BoxLayout.Y_AXIS));
+        JLabel explanation = new JLabel("Registre aportes e resgates. O saldo considera apenas os valores que você informar, sem cotação de mercado.");
+        explanation.setFont(new Font("Segoe UI", Font.PLAIN, 11)); explanation.setForeground(MUTED); explanation.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
+        JButton contribution = primaryButton("+ Registrar aporte"); contribution.addActionListener(e -> investmentMovementDialog(InvestmentStore.Type.APORTE));
+        JButton withdrawal = secondaryButton("− Registrar resgate"); withdrawal.addActionListener(e -> investmentMovementDialog(InvestmentStore.Type.RESGATE));
+        actions.add(contribution); actions.add(withdrawal); actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+        actions.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        intro.add(explanation); intro.add(Box.createVerticalStrut(8)); intro.add(actions);
+        content.add(intro); content.add(Box.createVerticalStrut(13));
+
+        JPanel stats = new JPanel(new GridLayout(1, 3, 12, 0)); stats.setOpaque(false);
+        stats.setPreferredSize(new Dimension(800, 125)); stats.setMaximumSize(new Dimension(Integer.MAX_VALUE, 125));
+        stats.add(statCard("SALDO INVESTIDO", money(investmentStore.balance()), "Aportes menos resgates registrados", GREEN));
+        stats.add(statCard("APORTES ACUMULADOS", money(investmentStore.total(InvestmentStore.Type.APORTE)), "Acumulado aportado", ACCENT));
+        stats.add(statCard("RESGATES ACUMULADOS", money(investmentStore.total(InvestmentStore.Type.RESGATE)), "Acumulado resgatado", PURPLE));
+        content.add(stats); content.add(Box.createVerticalStrut(13));
+        content.add(investmentChartCard()); content.add(Box.createVerticalStrut(13));
+        content.add(investmentHistoryCard());
+        JScrollPane scroll = new JScrollPane(content); scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false); scroll.getVerticalScrollBar().setUnitIncrement(18);
+        page.add(scroll, BorderLayout.CENTER); return page;
+    }
+
+    private JPanel investmentChartCard() {
+        JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 7));
+        card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(16, 18, 12, 18)));
+        JPanel header = new JPanel(new BorderLayout(10, 0)); header.setOpaque(false);
+        String period = investmentAllTime ? "Todo o histórico" : "Últimos seis meses";
+        header.add(sectionHeading("Evolução do saldo investido", period), BorderLayout.WEST);
+        header.add(rangeControls(investmentAllTime,
+                () -> { investmentAllTime = false; refreshPage(); },
+                () -> { investmentAllTime = true; refreshPage(); }), BorderLayout.EAST);
+        card.add(header, BorderLayout.NORTH);
+        TrendChart chart = new TrendChart();
+        chart.setData(investmentMonths(), month -> investmentStore.balanceAt(month.atEndOfMonth()));
+        card.add(chart, BorderLayout.CENTER);
+        JLabel note = new JLabel("A visualização mostra o saldo calculado pelos aportes e resgates registrados; rentabilidade e preços de mercado não são estimados.");
+        note.setFont(new Font("Segoe UI", Font.PLAIN, 10)); note.setForeground(MUTED); card.add(note, BorderLayout.SOUTH);
+        card.setPreferredSize(new Dimension(800, 330)); card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 330)); return card;
+    }
+
+    private JPanel investmentHistoryCard() {
+        JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 9));
+        card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(15, 18, 15, 18)));
+        card.add(sectionHeading("Histórico de investimentos", "Movimentos deste perfil"), BorderLayout.NORTH);
+        String[] columns = {"Data", "Movimento", "Observação", "Valor", "Saldo após"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0) { @Override public boolean isCellEditable(int row, int column) { return false; } };
+        Map<String, BigDecimal> balancesAfter = investmentStore.balancesAfterEach();
+        for (InvestmentStore.Movement movement : investmentStore.movements()) {
+            String signed = (movement.type() == InvestmentStore.Type.APORTE ? "+ " : "− ") + money(movement.amount());
+            model.addRow(new Object[]{movement.date().format(DATE_BR), movement.label(), movement.note().isBlank() ? "—" : movement.note(), signed, money(balancesAfter.getOrDefault(movement.id(), BigDecimal.ZERO))});
+        }
+        JTable table = new JTable(model); table.setRowHeight(36); table.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        table.setForeground(INK); table.setBackground(CARD); table.setGridColor(BORDER); table.setShowVerticalLines(false); table.setFillsViewportHeight(true);
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 10)); table.getTableHeader().setForeground(INK); table.getTableHeader().setBackground(CARD_ALT); table.getTableHeader().setPreferredSize(new Dimension(0, 34));
+        table.getTableHeader().setDefaultRenderer((source, value, selected, focused, row, column) -> {
+            JLabel cell = new JLabel("  " + String.valueOf(value)); cell.setOpaque(true); cell.setBackground(CARD_ALT); cell.setForeground(INK); cell.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            cell.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER)); return cell;
+        });
+        JScrollPane scroll = new JScrollPane(table); scroll.setBorder(BorderFactory.createLineBorder(BORDER)); scroll.setBackground(CARD); scroll.getViewport().setBackground(CARD);
+        card.add(scroll, BorderLayout.CENTER);
+        if (model.getRowCount() == 0) card.add(emptyMessage("Nenhum aporte ou resgate registrado neste perfil."), BorderLayout.SOUTH);
+        card.setPreferredSize(new Dimension(800, 280)); card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 340)); return card;
+    }
+
+    private void investmentMovementDialog(InvestmentStore.Type movementType) {
+        boolean contribution = movementType == InvestmentStore.Type.APORTE;
+        String actionName = contribution ? "Aporte" : "Resgate";
+        JDialog dialog = new JDialog(this, "Registrar " + actionName.toLowerCase(PT), true); dialog.setSize(470, 340); dialog.setLocationRelativeTo(this);
+        JPanel form = new JPanel(new GridLayout(0, 2, 12, 12)); form.setBackground(CARD); form.setBorder(BorderFactory.createEmptyBorder(22, 24, 14, 24));
+        JTextField date = new JTextField(LocalDate.now().format(DATE_BR)); styleInput(date); installDateInputFilter(date);
+        JTextField amount = new JTextField(); styleInput(amount); installCurrencyFormatting(amount);
+        JTextField note = new JTextField(); styleInput(note);
+        addField(form, "Data (dd/MM/aaaa)", date); addField(form, "Valor (R$)", amount); addField(form, "Observação (opcional)", note);
+        JLabel help = new JLabel(contribution ? "O valor será somado ao saldo investido." : "O resgate não pode superar o saldo disponível.");
+        help.setForeground(MUTED); help.setFont(new Font("Segoe UI", Font.PLAIN, 10)); form.add(new JLabel("")); form.add(help);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8)); buttons.setBackground(CARD);
+        JButton cancel = secondaryButton("Cancelar"); cancel.addActionListener(e -> dialog.dispose());
+        JButton save = primaryButton("Salvar " + actionName.toLowerCase(PT));
+        save.addActionListener(e -> {
+            try {
+                LocalDate parsedDate = LocalDate.parse(date.getText().trim(), DATE_BR);
+                BigDecimal parsedAmount = parseMoney(amount.getText());
+                if (parsedAmount.signum() <= 0) throw new IllegalArgumentException("Digite um valor maior que zero.");
+                investmentStore.add(parsedDate, movementType, parsedAmount, note.getText());
+                dialog.dispose(); refreshPage();
+            } catch (Exception ex) {
+                String message = ex.getMessage() == null ? "Confira a data e o valor." : ex.getMessage();
+                JOptionPane.showMessageDialog(dialog, message, "Não foi possível registrar", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        buttons.add(cancel); buttons.add(save); dialog.setLayout(new BorderLayout()); dialog.add(form, BorderLayout.CENTER); dialog.add(buttons, BorderLayout.SOUTH); dialog.setVisible(true);
+        SwingUtilities.invokeLater(amount::requestFocusInWindow);
+    }
+
     private JPanel buildPrivacyPage() {
         JPanel page = new JPanel(new BorderLayout()); page.setOpaque(false);
         JPanel content = new JPanel(); content.setOpaque(false); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
@@ -409,9 +626,9 @@ public final class OrcaBemApp extends JFrame {
         privacyCard.setBorder(BorderFactory.createCompoundBorder(privacyCard.getBorder(), BorderFactory.createEmptyBorder(22, 24, 22, 24))); privacyCard.setAlignmentX(Component.LEFT_ALIGNMENT); privacyCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 360));
         JLabel badge = new JLabel("●  ARMAZENAMENTO LOCAL"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(GREEN);
         JLabel heading = new JLabel("Seus dados ficam com você."); heading.setFont(new Font("Segoe UI", Font.BOLD, 19)); heading.setForeground(INK);
-        JLabel explanation = new JLabel("<html><div style='width:760px'>O OrçaBem salva seus lançamentos neste computador. Não é necessária uma conta e os dados não são enviados a um servidor.</div></html>"); explanation.setFont(new Font("Segoe UI", Font.PLAIN, 12)); explanation.setForeground(MUTED);
+        JLabel explanation = new JLabel("<html><div style='width:760px'>Os dados do perfil ativo ficam neste computador, em uma pasta separada. Não é necessária uma conta e os dados não são enviados a um servidor.</div></html>"); explanation.setFont(new Font("Segoe UI", Font.PLAIN, 12)); explanation.setForeground(MUTED);
         badge.setAlignmentX(Component.LEFT_ALIGNMENT); heading.setAlignmentX(Component.LEFT_ALIGNMENT); explanation.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JTextArea location = new JTextArea(dataDir.toString()); location.setRows(2); location.setColumns(72); location.setEditable(false); location.setLineWrap(true); location.setWrapStyleWord(true); location.setBackground(CARD_ALT); location.setForeground(INK); location.setBorder(BorderFactory.createEmptyBorder(9, 11, 9, 11)); location.setPreferredSize(new Dimension(700, 52)); location.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52)); location.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JTextArea location = new JTextArea(activeDataDir.toString()); location.setRows(2); location.setColumns(72); location.setEditable(false); location.setLineWrap(true); location.setWrapStyleWord(true); location.setBackground(CARD_ALT); location.setForeground(INK); location.setBorder(BorderFactory.createEmptyBorder(9, 11, 9, 11)); location.setPreferredSize(new Dimension(700, 52)); location.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52)); location.setAlignmentX(Component.LEFT_ALIGNMENT);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 9, 0)); actions.setOpaque(false); actions.setAlignmentX(Component.LEFT_ALIGNMENT);
         JButton export = primaryButton("Exportar lançamentos CSV"); export.addActionListener(e -> exportCsv());
         JButton importButton = secondaryButton("Importar CSV"); importButton.addActionListener(e -> importCsv());
@@ -425,9 +642,9 @@ public final class OrcaBemApp extends JFrame {
 
     private void openDataFolder() {
         try {
-            Files.createDirectories(dataDir);
-            if (java.awt.Desktop.isDesktopSupported()) java.awt.Desktop.getDesktop().open(dataDir.toFile());
-            else JOptionPane.showMessageDialog(this, "A pasta local fica em:\n" + dataDir);
+            Files.createDirectories(activeDataDir);
+            if (java.awt.Desktop.isDesktopSupported()) java.awt.Desktop.getDesktop().open(activeDataDir.toFile());
+            else JOptionPane.showMessageDialog(this, "A pasta local deste perfil fica em:\n" + activeDataDir);
         } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Não foi possível abrir a pasta local:\n" + ex.getMessage(), "Pasta de dados", JOptionPane.WARNING_MESSAGE); }
     }
 
@@ -618,7 +835,7 @@ public final class OrcaBemApp extends JFrame {
         String initialCategory = editMode ? editing.getCategory()
                 : initialType == Transaction.Type.EXPENSE && categoryStore.contains(initialType, "Restaurantes") ? "Restaurantes" : initialCategories.get(0);
         category.setSelectedItem(initialCategory);
-        styleInput(date); styleInput(type); styleInput(category);
+        styleInput(date); installDateInputFilter(date); styleInput(type); styleInput(category);
         type.addActionListener(e -> {
             Transaction.Type selectedType = type.getSelectedIndex() == 1 ? Transaction.Type.INCOME : Transaction.Type.EXPENSE;
             String[] choices = categoryStore.categories(selectedType).toArray(String[]::new);
@@ -663,6 +880,7 @@ public final class OrcaBemApp extends JFrame {
     }
 
     private void installCurrencyFormatting(JTextField field) {
+        installAllowedInputFilter(field, true);
         field.setToolTipText("Digite 10000; ao sair do campo, o valor ficará como 10000,00.");
         field.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override public void focusLost(java.awt.event.FocusEvent event) {
@@ -672,6 +890,38 @@ public final class OrcaBemApp extends JFrame {
                 catch (NumberFormatException ignored) { }
             }
         });
+    }
+
+    private static void installDateInputFilter(JTextField field) { installAllowedInputFilter(field, false); }
+
+    private static void installAllowedInputFilter(JTextField field, boolean currency) {
+        if (!(field.getDocument() instanceof javax.swing.text.AbstractDocument document)) return;
+        document.setDocumentFilter(new javax.swing.text.DocumentFilter() {
+            @Override public void insertString(FilterBypass bypass, int offset, String text, javax.swing.text.AttributeSet attributes) throws javax.swing.text.BadLocationException {
+                replace(bypass, offset, 0, text, attributes);
+            }
+
+            @Override public void replace(FilterBypass bypass, int offset, int length, String text, javax.swing.text.AttributeSet attributes) throws javax.swing.text.BadLocationException {
+                String insertion = text == null ? "" : text;
+                String current = bypass.getDocument().getText(0, bypass.getDocument().getLength());
+                String candidate = current.substring(0, offset) + insertion + current.substring(offset + length);
+                if (isAllowedNumericText(candidate, currency)) bypass.replace(offset, length, insertion, attributes);
+            }
+        });
+    }
+
+    private static boolean isAllowedNumericText(String value, boolean currency) {
+        int commas = 0, periods = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= '0' && c <= '9') continue;
+            if (currency && c == ',') commas++;
+            else if (currency && c == '.') periods++;
+            else if (!currency && c == '/') continue;
+            else return false;
+        }
+        if (!currency) return true;
+        return commas <= 1 && (commas == 1 || periods <= 1);
     }
 
     private void addField(JPanel form, String label, Component field) {
@@ -796,7 +1046,56 @@ public final class OrcaBemApp extends JFrame {
     private static BigDecimal parseMoney(String value) {
         String cleaned = value.trim().replace("R$", "").replace(" ", "");
         if (cleaned.contains(",")) cleaned = cleaned.replace(".", "").replace(',', '.');
-        return new BigDecimal(cleaned);
+        BigDecimal amount = new BigDecimal(cleaned);
+        if (amount.signum() < 0) throw new NumberFormatException("Valores negativos não são permitidos.");
+        return amount;
+    }
+
+    private static final class SidebarIcon implements javax.swing.Icon {
+        private final String type;
+        SidebarIcon(String type) { this.type = type; }
+        @Override public int getIconWidth() { return 18; }
+        @Override public int getIconHeight() { return 18; }
+
+        @Override public void paintIcon(Component component, java.awt.Graphics raw, int x, int y) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) raw.create();
+            g.translate(x, y);
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(component.isEnabled() ? component.getForeground() : MUTED);
+            g.setStroke(new java.awt.BasicStroke(1.7f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            switch (type) {
+                case "dashboard" -> {
+                    java.awt.geom.Path2D house = new java.awt.geom.Path2D.Double();
+                    house.moveTo(2, 8); house.lineTo(9, 2.5); house.lineTo(16, 8); g.draw(house);
+                    g.drawRoundRect(4, 7, 10, 9, 2, 2); g.drawLine(8, 16, 8, 11); g.drawLine(10, 16, 10, 11); g.drawLine(8, 11, 10, 11);
+                }
+                case "transactions" -> {
+                    g.drawLine(2, 5, 15, 5); g.drawLine(12, 2, 15, 5); g.drawLine(12, 8, 15, 5);
+                    g.drawLine(16, 13, 3, 13); g.drawLine(6, 10, 3, 13); g.drawLine(6, 16, 3, 13);
+                }
+                case "budgets" -> {
+                    g.drawRoundRect(3, 2, 12, 14, 2, 2); g.drawLine(6, 6, 12, 6); g.drawLine(6, 9, 12, 9); g.drawLine(6, 12, 10, 12);
+                }
+                case "investments" -> {
+                    g.drawLine(2, 16, 16, 16); g.drawRoundRect(3, 10, 3, 6, 1, 1); g.drawRoundRect(8, 7, 3, 9, 1, 1); g.drawRoundRect(13, 3, 3, 13, 1, 1);
+                }
+                case "categories" -> {
+                    g.drawRoundRect(2, 3, 5, 5, 2, 2); g.drawRoundRect(11, 3, 5, 5, 2, 2);
+                    g.drawRoundRect(2, 11, 5, 5, 2, 2); g.drawRoundRect(11, 11, 5, 5, 2, 2);
+                }
+                case "insights" -> {
+                    g.drawOval(5, 2, 8, 9); g.drawLine(7, 11, 7, 13); g.drawLine(11, 11, 11, 13); g.drawLine(7, 14, 11, 14); g.drawLine(8, 16, 10, 16);
+                    g.drawLine(9, 0, 9, 1); g.drawLine(3, 5, 4, 6); g.drawLine(14, 6, 15, 5);
+                }
+                case "privacy" -> {
+                    java.awt.geom.Path2D shield = new java.awt.geom.Path2D.Double();
+                    shield.moveTo(9, 2); shield.lineTo(15, 4.5); shield.lineTo(14.5, 10); shield.lineTo(12, 13.5); shield.lineTo(9, 16); shield.lineTo(6, 13.5); shield.lineTo(3.5, 10); shield.lineTo(3, 4.5); shield.closePath(); g.draw(shield);
+                    g.drawLine(6, 9, 8, 11); g.drawLine(8, 11, 12, 7);
+                }
+                default -> { g.drawOval(3, 3, 12, 12); g.drawLine(6, 9, 12, 9); }
+            }
+            g.dispose();
+        }
     }
 
     private static final class ThemeComboBox<E> extends javax.swing.JComboBox<E> {

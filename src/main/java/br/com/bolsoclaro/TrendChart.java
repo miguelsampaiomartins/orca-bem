@@ -68,10 +68,13 @@ public final class TrendChart extends JPanel {
         if (months.isEmpty()) { g.dispose(); return; }
         drawSeries(g, primaryAmounts, incomeColor, ceiling, left, top, width, height, true);
         if (secondaryAmounts != null) drawSeries(g, secondaryAmounts, expenseColor, ceiling, left, top, width, height, false);
+        int labelStep = Math.max(1, (months.size() + 5) / 6);
         for (int i = 0; i < months.size(); i++) {
+            if (i != 0 && i != months.size() - 1 && i % labelStep != 0) continue;
             double x = xAt(i, months.size(), left, width);
             g.setColor(muted); g.setFont(getFont().deriveFont(Font.PLAIN, 10f));
             String label = months.get(i).getMonth().getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("pt-BR"));
+            if (months.size() > 12) label += "/" + String.valueOf(months.get(i).getYear()).substring(2);
             g.drawString(label.substring(0, 1).toUpperCase(Locale.ROOT) + label.substring(1), (int)x - 14, top + height + 23);
         }
         g.dispose();

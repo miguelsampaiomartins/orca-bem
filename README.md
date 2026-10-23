@@ -7,19 +7,23 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Registra receitas e despesas com data, categoria, descrição opcional e valor.
 - Permite editar ou excluir um lançamento selecionado e pesquisar por descrição ou categoria.
 - Apresenta quanto sobra depois dos gastos, receitas, despesas e orçamento ainda disponível no mês selecionado.
-- Mostra a distribuição percentual dos gastos por categoria e o fluxo de caixa de receitas e despesas nos últimos seis meses.
+- Mostra a distribuição percentual dos gastos por categoria e o fluxo de caixa de receitas e despesas nos últimos seis meses ou em todo o período registrado.
 - Permite definir limites mensais por categoria e comparar o limite com o gasto realizado, com alertas em linguagem simples quando está perto ou foi ultrapassado.
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
+- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico em seis meses ou em todo o período. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
+- Permite criar perfis locais independentes e alternar entre eles; lançamentos, orçamentos, categorias, metas e investimentos ficam separados por perfil.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
-- Salva automaticamente lançamentos, orçamentos, categorias e metas no perfil local do usuário.
-- Organiza o conteúdo em Visão geral, Movimentações, Orçamentos, Categorias, Insights e Dados e privacidade.
+- Salva automaticamente os dados do perfil ativo somente neste computador.
+- Organiza o conteúdo em Visão geral, Movimentações, Orçamentos, Investimentos, Categorias, Insights e Dados e privacidade.
+- Usa ícones vetoriais desenhados em Java2D para essas áreas, sem depender de glifos especiais instalados no Windows.
 - Permite abrir a pasta local dos dados e importar/exportar CSV na área de privacidade.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
 - Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
 - Formata valores automaticamente ao sair do campo: `10000` vira `10000,00` tanto em lançamentos quanto em orçamentos.
-- Usa um ícone vetorial próprio em verde-floresta e âmbar na janela e inclui o arquivo `favicon.png`.
+- Aceita apenas números nos campos de data e valor, bloqueia sinais negativos e impede resgates maiores que o saldo investido disponível.
+- Usa o ícone de carteira, moeda e seta aprovado na janela e na marca do app, com os arquivos `favicon.png` e `src/main/resources/orcabem-icon.png`.
 
 ## Requisitos
 
@@ -40,20 +44,27 @@ O script compila o código para `build/classes` e inicia o OrçaBem.
 
 ## Ícone
 
-O ícone da janela é desenhado em Java para aparecer na barra de título e na barra de tarefas. O PNG de 256 × 256 está em `favicon.png` e também em `src/main/resources/orcabem-icon.png`.
+O mesmo ícone é usado na barra de título, na barra de tarefas e na marca do app. A imagem de 512 × 512 está em `favicon.png` e em `src/main/resources/orcabem-icon.png`; `AppIcon` gera os tamanhos necessários para a interface.
 
 ## Armazenamento local
 
-Os arquivos são criados automaticamente em:
+Os dados ficam em `%USERPROFILE%\.bolso-claro`. O perfil **Pessoal** usa diretamente os arquivos legados para preservar os dados existentes; cada perfil adicional recebe uma subpasta exclusiva em `profiles`. O catálogo guarda o nome e o perfil ativo:
 
 ```text
 %USERPROFILE%\.bolso-claro\transacoes.csv
 %USERPROFILE%\.bolso-claro\orcamentos.properties
 %USERPROFILE%\.bolso-claro\categorias.properties
 %USERPROFILE%\.bolso-claro\metas.properties
+%USERPROFILE%\.bolso-claro\investimentos.properties
+%USERPROFILE%\.bolso-claro\profiles.properties
+%USERPROFILE%\.bolso-claro\profiles\<id-do-perfil>\transacoes.csv
+%USERPROFILE%\.bolso-claro\profiles\<id-do-perfil>\orcamentos.properties
+%USERPROFILE%\.bolso-claro\profiles\<id-do-perfil>\categorias.properties
+%USERPROFILE%\.bolso-claro\profiles\<id-do-perfil>\metas.properties
+%USERPROFILE%\.bolso-claro\profiles\<id-do-perfil>\investimentos.properties
 ```
 
-O nome legado `.bolso-claro` é mantido intencionalmente para que usuários que atualizem a partir da versão anterior continuem vendo os mesmos dados. Para fazer backup, copie essa pasta. Remover os arquivos apaga os dados locais do app.
+O nome legado `.bolso-claro` é mantido intencionalmente para que usuários que atualizem a partir da versão anterior continuem vendo os mesmos dados. Para fazer backup, copie toda essa pasta. Remover os arquivos apaga os dados locais dos perfis. Para testar em outro local sem tocar nos dados normais, passe `-Dorcabem.data.dir=<caminho>` ao iniciar o Java.
 
 ## CSV
 
@@ -78,6 +89,8 @@ src/main/java/br/com/bolsoclaro/
   BudgetStore.java    persistência de limites por mês e categoria
   CategoryStore.java  categorias pessoais de receitas e despesas
   SavingsGoalStore.java metas de economia mensais
+  ProfileStore.java   catálogo de perfis locais independentes
+  InvestmentStore.java histórico local de aportes e resgates
   TrendChart.java     gráfico Java2D de fluxo de caixa mensal
 src/main/resources/
   orcabem-icon.png    ícone PNG do aplicativo
