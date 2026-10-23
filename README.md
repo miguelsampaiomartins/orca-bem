@@ -21,9 +21,6 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite abrir a pasta local dos dados e importar/exportar CSV na área de privacidade.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
 - Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
-- Formata valores automaticamente ao sair do campo: `10000` vira `10000,00` tanto em lançamentos quanto em orçamentos.
-- Aceita apenas números nos campos de data e valor, bloqueia sinais negativos e impede resgates maiores que o saldo investido disponível.
-- Usa o ícone de carteira, moeda e seta aprovado na janela e na marca do app, com os arquivos `favicon.png` e `src/main/resources/orcabem-icon.png`.
 
 ## Requisitos
 
