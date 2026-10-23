@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.2";
+    private static final String APP_VERSION = "1.0.3";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -276,7 +276,7 @@ public final class OrcaBemApp extends JFrame {
                     }
                     if (!release.hasVerifiedWindowsAsset()) {
                         JOptionPane.showMessageDialog(OrcaBemApp.this,
-                                "O GitHub não forneceu um SHA-256 válido para OrcaBem.exe. O download foi bloqueado para proteger o aplicativo.",
+                                "O GitHub não forneceu uma conferência de integridade válida para OrcaBem.exe. O download foi bloqueado para proteger o aplicativo.",
                                 "Não foi possível validar a atualização", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
@@ -339,7 +339,7 @@ public final class OrcaBemApp extends JFrame {
         String destination = updateDownloadDirectory().toAbsolutePath().toString();
         String initialStatus = isUpdateSimulation()
                 ? "Teste isolado: o arquivo fictício será salvo em " + destination + ". Ele não é um executável real e não deve ser aberto."
-                : "O arquivo será baixado para " + destination + " e validado por SHA-256. O aplicativo não será substituído enquanto estiver aberto.";
+                : "O arquivo será baixado para " + destination + " e conferido automaticamente antes de ser salvo. Depois, feche o app e abra o arquivo baixado.";
         JTextArea status = new JTextArea(initialStatus);
         status.setEditable(false); status.setFocusable(false); status.setOpaque(false); status.setLineWrap(true); status.setWrapStyleWord(true);
         status.setFont(new Font("Segoe UI", Font.PLAIN, 11)); status.setForeground(MUTED); status.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
@@ -375,11 +375,11 @@ public final class OrcaBemApp extends JFrame {
                     downloading[0] = false;
                     try {
                         Path saved = get(); completed[0] = true;
-                        progress.setValue(100); progress.setString("SHA-256 conferido");
+                        progress.setValue(100); progress.setString("Arquivo conferido");
                         String warning = isUpdateSimulation()
                                 ? "\n\nEste arquivo é fictício, não é um executável válido e NÃO deve ser aberto."
-                                : "\n\nO aplicativo não foi fechado nem substituído.";
-                        status.setText("Download verificado e salvo em:\n" + saved.toAbsolutePath() + warning); status.setForeground(GREEN);
+                                : "\n\nFeche o OrçaBem e abra este arquivo para usar a nova versão.";
+                        status.setText("Atualização baixada e conferida. Arquivo salvo em:\n" + saved.toAbsolutePath() + warning); status.setForeground(GREEN);
                         download.setText("Concluído"); download.setEnabled(false); cancel.setText("Fechar"); cancel.setEnabled(true);
                     } catch (InterruptedException ex) {
                         Thread.currentThread().interrupt(); downloadFailed("O download foi interrompido.");
@@ -883,15 +883,28 @@ public final class OrcaBemApp extends JFrame {
             public void changedUpdate(DocumentEvent e) { populate.run(); }
         });
         typeFilter.addActionListener(e -> populate.run());
-        JButton edit = secondaryButton("Editar selecionado"); edit.setEnabled(false);
-        JButton delete = secondaryButton("Excluir selecionado"); delete.setEnabled(false);
+        JButton edit = secondaryButton("Editar lançamento"); edit.setEnabled(false);
+        edit.setToolTipText("Selecione um lançamento na tabela para editá-lo");
+        JButton delete = secondaryButton("Remover lançamento"); delete.setEnabled(false);
+        delete.setToolTipText("Selecione um lançamento na tabela para removê-lo");
+        actions.add(edit); actions.add(delete);
         table.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) { boolean selected = table.getSelectedRow() >= 0; edit.setEnabled(selected); delete.setEnabled(selected); } });
         edit.addActionListener(e -> { int row = table.getSelectedRow(); if (row >= 0 && row < filtered.size()) addTransactionDialog(filtered.get(row)); });
         delete.addActionListener(e -> { int row = table.getSelectedRow(); if (row < 0 || row >= filtered.size()) return;
-            Transaction chosen = filtered.get(row); int confirm = JOptionPane.showConfirmDialog(this, "Excluir “" + chosen.getDescription() + "”?");
-            if (confirm == JOptionPane.YES_OPTION) { transactions.removeIf(t -> t.getId().equals(chosen.getId())); persistTransactions(); refreshPage(); }
+            Transaction chosen = filtered.get(row);
+            String description = chosen.getDescription().equals("Sem descrição") ? chosen.getCategory() : chosen.getDescription();
+            String details = description + " · " + chosen.getDate().format(DATE_BR) + " · " + money(chosen.getAmount());
+            int confirm = JOptionPane.showConfirmDialog(this, "Remover este lançamento?\n\n" + details + "\n\nEssa ação não pode ser desfeita.",
+                    "Remover lançamento", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, null);
+            if (confirm == JOptionPane.YES_OPTION) {
+                int originalIndex = transactions.indexOf(chosen);
+                if (originalIndex >= 0) {
+                    transactions.remove(originalIndex);
+                    if (!persistTransactions()) transactions.add(originalIndex, chosen);
+                    refreshPage();
+                }
+            }
         });
-        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); bottom.setOpaque(false); bottom.add(edit); bottom.add(delete); page.add(bottom, BorderLayout.SOUTH);
         return page;
     }
 
@@ -1133,9 +1146,9 @@ public final class OrcaBemApp extends JFrame {
         catch (IOException ex) { JOptionPane.showMessageDialog(this, "Falha ao salvar o CSV: " + ex.getMessage(), "Erro na exportação", JOptionPane.ERROR_MESSAGE); }
     }
 
-    private void persistTransactions() {
-        try { CsvStore.save(transactionsFile, transactions); }
-        catch (IOException ex) { JOptionPane.showMessageDialog(this, "Não foi possível salvar os dados locais: " + ex.getMessage(), "Erro ao salvar", JOptionPane.ERROR_MESSAGE); }
+    private boolean persistTransactions() {
+        try { CsvStore.save(transactionsFile, transactions); return true; }
+        catch (IOException ex) { JOptionPane.showMessageDialog(this, "Não foi possível salvar os dados locais: " + ex.getMessage(), "Erro ao salvar", JOptionPane.ERROR_MESSAGE); return false; }
     }
 
     private BigDecimal total(YearMonth month, Transaction.Type type) {

@@ -112,7 +112,7 @@ public final class UpdateService {
     public static Path download(Release release, Path destinationDirectory, IntConsumer progress)
             throws IOException, InterruptedException {
         if (release == null || !release.hasVerifiedWindowsAsset())
-            throw new IOException("A Release precisa incluir OrcaBem.exe e o SHA-256 fornecido pelo GitHub.");
+            throw new IOException("A Release precisa incluir OrcaBem.exe e os dados necessários para conferir sua integridade.");
         if (!isStableVersion(release.tag())) throw new IOException("A versão da Release não está no formato x.y.z.");
         if (release.size() > MAX_DOWNLOAD_BYTES) throw new IOException("O arquivo da atualização ultrapassa o limite de tamanho permitido.");
         boolean localTestEndpoint = System.getProperty("orcabem.update.apiUrl") != null;
@@ -158,7 +158,7 @@ public final class UpdateService {
                 throw new IOException("O tamanho baixado não corresponde ao tamanho informado pelo GitHub.");
             String actualDigest = HexFormat.of().formatHex(digest.digest());
             if (!actualDigest.equalsIgnoreCase(release.sha256()))
-                throw new IOException("A verificação SHA-256 falhou. O arquivo foi descartado por segurança.");
+                throw new IOException("A conferência de integridade falhou. O arquivo foi descartado por segurança.");
             progress.accept(100);
 
             String version = release.tag().replaceFirst("(?i)^v", "");
