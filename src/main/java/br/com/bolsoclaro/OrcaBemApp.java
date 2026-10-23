@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.5";
+    private static final String APP_VERSION = "1.0.6";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -169,7 +169,8 @@ public final class OrcaBemApp extends JFrame {
         card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(14, 14, 14, 14)));
         JLabel chooserLabel = new JLabel("Perfil"); chooserLabel.setFont(new Font("Segoe UI", Font.BOLD, 11)); chooserLabel.setForeground(MUTED);
         ThemeComboBox<ProfileStore.Profile> chooser = new ThemeComboBox<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new));
-        chooser.setSelectedItem(activeProfile); styleInput(chooser); chooser.setPreferredSize(new Dimension(300, 36));
+        chooser.setSelectedItem(activeProfile); chooser.setMaximumRowCount(Math.min(profileStore.profiles().size(), 12));
+        styleInput(chooser); chooser.setPreferredSize(new Dimension(420, 40));
         chooser.setRenderer((list, value, index, selected, focus) -> {
             JLabel item = new JLabel(value == null ? "" : value.name() + (value.id().equals(activeProfile.id()) ? "  ·  em uso" : ""));
             item.setOpaque(true); item.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
@@ -220,7 +221,7 @@ public final class OrcaBemApp extends JFrame {
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
         actions.add(close); actions.add(delete);
         root.add(heading, BorderLayout.NORTH); root.add(card, BorderLayout.CENTER); root.add(actions, BorderLayout.SOUTH);
-        dialog.setContentPane(root); dialog.setSize(510, 235); dialog.setMinimumSize(new Dimension(480, 220)); dialog.setLocationRelativeTo(this);
+        dialog.setContentPane(root); dialog.setSize(660, 360); dialog.setMinimumSize(new Dimension(640, 340)); dialog.setResizable(false); dialog.setLocationRelativeTo(this);
         updateDeleteState.run(); dialog.setVisible(true);
     }
 
@@ -247,17 +248,21 @@ public final class OrcaBemApp extends JFrame {
         JLabel profileLabel = new JLabel("PERFIL ATIVO"); profileLabel.setFont(new Font("Segoe UI", Font.BOLD, 9)); profileLabel.setForeground(MUTED);
         profileLabel.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(profileLabel); sidebar.add(Box.createVerticalStrut(6));
         profileChooser = new ThemeComboBox<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new));
-        profileChooser.setSelectedItem(activeProfile); profileChooser.setPreferredSize(new Dimension(132, 35)); profileChooser.setMaximumSize(new Dimension(132, 35)); styleInput(profileChooser);
+        profileChooser.setSelectedItem(activeProfile); profileChooser.setPreferredSize(new Dimension(216, 38)); profileChooser.setMaximumSize(new Dimension(216, 38));
+        profileChooser.setAlignmentX(Component.LEFT_ALIGNMENT); styleInput(profileChooser);
         profileChooser.addActionListener(e -> {
             Object selected = profileChooser.getSelectedItem();
             if (!suppressProfileSelection && selected instanceof ProfileStore.Profile profile && activeProfile != null && !profile.id().equals(activeProfile.id())) activateProfile(profile);
         });
-        JButton newProfile = secondaryButton("+"); newProfile.setToolTipText("Criar perfil independente"); newProfile.setPreferredSize(new Dimension(28, 35));
+        JButton newProfile = secondaryButton("Criar perfil"); newProfile.setToolTipText("Criar perfil independente");
+        newProfile.setPreferredSize(new Dimension(216, 36)); newProfile.setMaximumSize(new Dimension(216, 36)); newProfile.setAlignmentX(Component.LEFT_ALIGNMENT);
         newProfile.addActionListener(e -> createProfileDialog());
-        JButton manageProfiles = secondaryButton("−"); manageProfiles.setToolTipText("Gerenciar e excluir perfis existentes"); manageProfiles.setPreferredSize(new Dimension(28, 35));
+        JButton manageProfiles = secondaryButton("Gerenciar perfis"); manageProfiles.setToolTipText("Gerenciar e excluir perfis existentes");
+        manageProfiles.setPreferredSize(new Dimension(216, 36)); manageProfiles.setMaximumSize(new Dimension(216, 36)); manageProfiles.setAlignmentX(Component.LEFT_ALIGNMENT);
         manageProfiles.addActionListener(e -> manageProfilesDialog());
-        JPanel profileRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); profileRow.setOpaque(false); profileRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        profileRow.add(profileChooser); profileRow.add(newProfile); profileRow.add(manageProfiles); sidebar.add(profileRow); sidebar.add(Box.createVerticalStrut(22));
+        sidebar.add(profileChooser); sidebar.add(Box.createVerticalStrut(7));
+        sidebar.add(newProfile); sidebar.add(Box.createVerticalStrut(6));
+        sidebar.add(manageProfiles); sidebar.add(Box.createVerticalStrut(22));
         addNav("dashboard", "Visão geral");
         addNav("transactions", "Lançamentos");
         addNav("budgets", "Orçamentos");

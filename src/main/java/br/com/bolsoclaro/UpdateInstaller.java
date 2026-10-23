@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
-/** Stages a verified Windows update and starts a detached PowerShell helper to replace/relaunch the EXE after exit. */
+/** Stages a verified Windows update and replaces/relaunches the EXE after all running instances exit. */
 public final class UpdateInstaller {
     private UpdateInstaller() { }
 
@@ -25,7 +25,7 @@ public final class UpdateInstaller {
         return null;
     }
 
-    /** Launches a detached helper; caller should exit immediately after this method succeeds. */
+    /** Starts a detached helper; caller should exit immediately after this method succeeds. */
     public static Path startAfterExit(Path downloadedExecutable, Path installedExecutable, long processId) throws IOException {
         Path source = requireWindowsExecutable(downloadedExecutable, "arquivo baixado");
         Path target = requireWindowsExecutable(installedExecutable, "aplicativo instalado");
@@ -35,7 +35,13 @@ public final class UpdateInstaller {
         String scriptText = createPowerShellScript(source, target, processId);
         Path script = Files.createTempFile("orcabem-update-install-", ".ps1");
         try {
-            Files.writeString(script, scriptText, StandardCharsets.UTF_8);
+            byte[] body = scriptText.getBytes(StandardCharsets.UTF_8);
+            byte[] withBom = new byte[body.length + 3];
+            withBom[0] = (byte) 0xEF;
+            withBom[1] = (byte) 0xBB;
+            withBom[2] = (byte) 0xBF;
+            System.arraycopy(body, 0, withBom, 3, body.length);
+            Files.write(script, withBom);
             ProcessBuilder builder = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive",
                     "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script.toString());
             builder.redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -56,33 +62,62 @@ public final class UpdateInstaller {
                 .append("$source = ").append(sourceLiteral).append("\r\n")
                 .append("$target = ").append(targetLiteral).append("\r\n")
                 .append("$processIdToWait = ").append(processId).append("\r\n")
+                .append("$scriptPath = $PSCommandPath\r\n")
+                .append("$log = [IO.Path]::ChangeExtension($scriptPath, '.log')\r\n")
                 .append("$stage = $target + '.' + [guid]::NewGuid().ToString('N') + '.new.exe'\r\n")
                 .append("$backup = $target + '.' + [guid]::NewGuid().ToString('N') + '.backup'\r\n")
+                .append("function Write-UpdateLog([string]$message) { Add-Content -LiteralPath $log -Value ('[{0}] {1}' -f [DateTime]::Now.ToString('s'), $message) -Encoding UTF8 }\r\n")
+                .append("function Test-OrcaBemRunning {\r\n")
+                .append("  $pidAlive = $null -ne (Get-Process -Id $processIdToWait -ErrorAction SilentlyContinue)\r\n")
+                .append("  $targetAlive = $false\r\n")
+                .append("  try {\r\n")
+                .append("    $processes = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $target, [StringComparison]::OrdinalIgnoreCase) })\r\n")
+                .append("    $targetAlive = $processes.Count -gt 0\r\n")
+                .append("  } catch { Write-UpdateLog ('Não foi possível enumerar processos pelo caminho: ' + $_.Exception.Message) }\r\n")
+                .append("  return ($pidAlive -or $targetAlive)\r\n")
+                .append("}\r\n")
                 .append("try {\r\n")
-                .append("  $deadline = [DateTime]::UtcNow.AddSeconds(90)\r\n")
-                .append("  while ($true) {\r\n")
-                .append("    $running = Get-Process -Id $processIdToWait -ErrorAction SilentlyContinue\r\n")
-                .append("    $unlocked = $false\r\n")
-                .append("    if (-not $running) {\r\n")
-                .append("      try { $probe = [IO.File]::Open($target, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None); $probe.Dispose(); $unlocked = $true } catch { }\r\n")
-                .append("    }\r\n")
-                .append("    if ($unlocked) { break }\r\n")
-                .append("    if ([DateTime]::UtcNow -ge $deadline) { throw 'O aplicativo ainda está em uso. Tente novamente.' }\r\n")
-                .append("    Start-Sleep -Milliseconds 400\r\n")
+                .append("  Write-UpdateLog ('Iniciando atualização. EXE alvo: ' + $target)\r\n")
+                .append("  $exitDeadline = [DateTime]::UtcNow.AddSeconds(120)\r\n")
+                .append("  while (Test-OrcaBemRunning) {\r\n")
+                .append("    if ([DateTime]::UtcNow -ge $exitDeadline) { throw 'O processo do OrçaBem continua aberto após 120 segundos.' }\r\n")
+                .append("    Start-Sleep -Milliseconds 500\r\n")
                 .append("  }\r\n")
-                .append("  Copy-Item -LiteralPath $source -Destination $stage\r\n")
-                .append("  $stream = [IO.File]::OpenRead($stage)\r\n")
-                .append("  try { if ($stream.Length -lt 2 -or $stream.ReadByte() -ne 77 -or $stream.ReadByte() -ne 90) { throw 'O executável baixado é inválido.' } } finally { $stream.Dispose() }\r\n")
-                .append("  [IO.File]::Replace($stage, $target, $backup, $true)\r\n")
-                .append("  Start-Process -FilePath $target\r\n")
-                .append("  Start-Sleep -Milliseconds 1200\r\n")
+                .append("  Write-UpdateLog 'Processos encerrados; preparando a substituição.'\r\n")
+                .append("  $copyDeadline = [DateTime]::UtcNow.AddSeconds(45)\r\n")
+                .append("  while ($true) {\r\n")
+                .append("    try {\r\n")
+                .append("      Copy-Item -LiteralPath $source -Destination $stage -Force\r\n")
+                .append("      $stream = [IO.File]::OpenRead($stage)\r\n")
+                .append("      try { if ($stream.Length -lt 2 -or $stream.ReadByte() -ne 77 -or $stream.ReadByte() -ne 90) { throw 'O executável baixado é inválido.' } } finally { $stream.Dispose() }\r\n")
+                .append("      break\r\n")
+                .append("    } catch {\r\n")
+                .append("      if ([DateTime]::UtcNow -ge $copyDeadline) { throw ('Não foi possível preparar a nova versão: ' + $_.Exception.Message) }\r\n")
+                .append("      Start-Sleep -Milliseconds 500\r\n")
+                .append("    }\r\n")
+                .append("  }\r\n")
+                .append("  $replaceDeadline = [DateTime]::UtcNow.AddSeconds(90)\r\n")
+                .append("  $replaced = $false\r\n")
+                .append("  while (-not $replaced) {\r\n")
+                .append("    try { [IO.File]::Replace($stage, $target, $backup, $true); $replaced = $true }\r\n")
+                .append("    catch {\r\n")
+                .append("      $lastReplaceError = $_.Exception.Message\r\n")
+                .append("      if ([DateTime]::UtcNow -ge $replaceDeadline) { throw ('O Windows manteve o executável bloqueado: ' + $lastReplaceError) }\r\n")
+                .append("      Start-Sleep -Milliseconds 500\r\n")
+                .append("    }\r\n")
+                .append("  }\r\n")
+                .append("  Write-UpdateLog 'Executável instalado por substituição atômica.'\r\n")
+                .append("  Start-Process -FilePath $target -WorkingDirectory ([IO.Path]::GetDirectoryName($target))\r\n")
+                .append("  Write-UpdateLog 'Nova versão iniciada.'\r\n")
+                .append("  Start-Sleep -Seconds 2\r\n")
                 .append("  Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue\r\n")
                 .append("} catch {\r\n")
+                .append("  $failure = $_.Exception.Message\r\n")
+                .append("  try { Write-UpdateLog ('FALHA: ' + $failure) } catch { }\r\n")
                 .append("  Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue\r\n")
-                .append("  try { Start-Process -FilePath $source } catch { }\r\n")
-                .append("  try { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(('Não foi possível substituir o OrçaBem. Uma cópia da versão baixada será aberta.\r\n\r\n' + $_.Exception.Message), 'OrçaBem - atualização', 'OK', 'Warning') | Out-Null } catch { }\r\n")
+                .append("  try { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(('Não foi possível concluir a instalação. A versão baixada permanece em:' + [Environment]::NewLine + $source + [Environment]::NewLine + [Environment]::NewLine + 'Detalhe: ' + $failure + [Environment]::NewLine + 'Registro: ' + $log), 'OrçaBem - atualização', 'OK', 'Warning') | Out-Null } catch { }\r\n")
                 .append("} finally {\r\n")
-                .append("  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n")
+                .append("  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue\r\n")
                 .append("}\r\n");
         return script.toString();
     }

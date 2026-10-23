@@ -12,7 +12,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
 - Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
-- Permite criar, alternar e excluir perfis locais independentes; use o botão `−` ao lado do seletor para gerenciar e excluir um perfil inativo. A exclusão pede confirmação e remove os dados daquele perfil. O perfil ativo e o perfil Pessoal (que conserva os dados legados) são protegidos.
+- Permite criar, alternar e excluir perfis locais independentes pelos botões **Criar perfil** e **Gerenciar perfis** abaixo do seletor. A janela de gerenciamento abre ampliada; a exclusão pede confirmação e remove os dados do perfil inativo. O perfil ativo e o perfil Pessoal (que conserva os dados legados) são protegidos.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
 - Salva automaticamente os dados do perfil ativo somente neste computador.
@@ -38,9 +38,9 @@ Para preservar os dados criados por cópias anteriores do executável público, 
 
 ## Atualizações
 
-O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo automaticamente a integridade antes de salvar. A partir da v1.0.4, **Instalar e reiniciar** fecha o app, substitui o executável em execução e abre a nova versão. Se o Windows não permitir a substituição na pasta atual, o instalador abre o executável baixado para uso manual. As versões anteriores à v1.0.4 não têm essa etapa de instalação: para fazer essa primeira atualização, abra manualmente o `.exe` baixado; as próximas poderão usar o botão de instalação.
+O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo automaticamente a integridade antes de salvar. **Instalar e reiniciar** aguarda o encerramento de todas as instâncias do executável, tenta novamente a substituição atômica quando o Windows mantém um bloqueio temporário e abre o arquivo instalado atualizado. A janela de gerenciamento de perfis tem ações textuais visíveis. Se a troca falhar, o app mantém o download e informa onde consultar o registro de diagnóstico, em vez de abrir silenciosamente uma cópia paralela. As versões anteriores à v1.0.4 não têm essa etapa de instalação: para fazer essa primeira atualização, abra manualmente o `.exe` baixado; as próximas poderão usar o botão de instalação.
 
-Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.6`, anexando o arquivo exatamente como `OrcaBem.exe`. O executável deve receber a propriedade Launch4j `-Dlaunch4j.exefile="%EXEFILE%"` para identificar o caminho de instalação. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
+Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.7`, anexando o arquivo exatamente como `OrcaBem.exe`. O executável deve receber a propriedade Launch4j `-Dlaunch4j.exefile="%EXEFILE%"` para identificar o caminho de instalação. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
 
 ## Ícone
 
