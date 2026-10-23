@@ -64,6 +64,8 @@ public final class OrcaBemApp extends JFrame {
     private static final Color PURPLE = new Color(185, 163, 232);
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
+    // Incrementar antes de gerar o executável de cada versão publicada.
+    private static final String APP_VERSION = "1.0.1";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -215,13 +217,181 @@ public final class OrcaBemApp extends JFrame {
         monthLabel.setFont(new Font("Segoe UI", Font.BOLD, 13)); monthLabel.setForeground(INK); monthLabel.setPreferredSize(new Dimension(142, 38));
         monthPicker.add(previous); monthPicker.add(monthLabel); monthPicker.add(next);
         JPanel headerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0)); headerActions.setOpaque(false);
+        JButton updateButton = secondaryButton(updateButtonLabel());
+        updateButton.setToolTipText(isUpdateSimulation() ? "Simulação local: não consulta o GitHub nem usa um executável real." : "Consultar a versão mais recente publicada em Releases no GitHub.");
+        updateButton.addActionListener(e -> checkForUpdates(updateButton));
         JButton quickAdd = primaryButton("+ Novo lançamento"); quickAdd.setToolTipText("Registrar uma receita ou despesa"); quickAdd.addActionListener(e -> addTransactionDialog());
-        headerActions.add(monthPicker); headerActions.add(quickAdd);
+        headerActions.add(monthPicker); headerActions.add(updateButton); headerActions.add(quickAdd);
         header.add(titles, BorderLayout.WEST); header.add(headerActions, BorderLayout.EAST);
         root.add(header, BorderLayout.NORTH);
         pageHost.setOpaque(false); pageHost.setBorder(BorderFactory.createEmptyBorder(0, 30, 28, 30));
         root.add(pageHost, BorderLayout.CENTER);
         return root;
+    }
+
+    private void checkForUpdates(JButton button) {
+        button.setEnabled(false); button.setText("Verificando…");
+        new javax.swing.SwingWorker<java.util.Optional<UpdateService.Release>, Void>() {
+            @Override protected java.util.Optional<UpdateService.Release> doInBackground() throws Exception {
+                return UpdateService.fetchLatest();
+            }
+
+            @Override protected void done() {
+                button.setEnabled(true); button.setText(updateButtonLabel());
+                try {
+                    java.util.Optional<UpdateService.Release> result = get();
+                    if (result.isEmpty()) {
+                        JOptionPane.showMessageDialog(OrcaBemApp.this,
+                                "Ainda não há uma versão publicada na aba Releases do GitHub.\n\nQuando uma Release for criada, o OrçaBem poderá verificar se ela é mais recente que a versão " + APP_VERSION + ".",
+                                "Nenhuma versão publicada", JOptionPane.INFORMATION_MESSAGE);
+                        return;
+                    }
+                    UpdateService.Release release = result.get();
+                    int comparison;
+                    try { comparison = UpdateService.compareVersions(release.tag(), APP_VERSION); }
+                    catch (IllegalArgumentException ex) {
+                        JOptionPane.showMessageDialog(OrcaBemApp.this,
+                                "A Release mais recente usa uma tag incompatível. Publique versões estáveis no formato v1.2.3.",
+                                "Formato de versão inválido", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    if (comparison <= 0) {
+                        String message = comparison == 0
+                                ? "Você já está usando a versão mais recente (" + APP_VERSION + ")."
+                                : "Esta instalação (" + APP_VERSION + ") é mais nova que a última Release pública (" + release.tag() + ").";
+                        JOptionPane.showMessageDialog(OrcaBemApp.this, message, "OrçaBem atualizado", JOptionPane.INFORMATION_MESSAGE);
+                        return;
+                    }
+                    if (release.assetUri() == null || release.assetName() == null) {
+                        JOptionPane.showMessageDialog(OrcaBemApp.this,
+                                "A versão " + release.tag() + " foi publicada, mas não contém o arquivo OrcaBem.exe.\n\nAnexe o executável aos arquivos da Release para habilitar o download.",
+                                "Arquivo da atualização ausente", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    if (!release.hasVerifiedWindowsAsset()) {
+                        JOptionPane.showMessageDialog(OrcaBemApp.this,
+                                "O GitHub não forneceu um SHA-256 válido para OrcaBem.exe. O download foi bloqueado para proteger o aplicativo.",
+                                "Não foi possível validar a atualização", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    showDownloadConfirmationDialog(release);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    JOptionPane.showMessageDialog(OrcaBemApp.this, "A verificação foi interrompida.", "Verificação de atualizações", JOptionPane.WARNING_MESSAGE);
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                    String detail = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+                    JOptionPane.showMessageDialog(OrcaBemApp.this,
+                            "Não foi possível consultar as Releases do GitHub.\n" + detail,
+                            "Falha na verificação", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private static boolean isUpdateSimulation() {
+        return Boolean.getBoolean("orcabem.update.simulation");
+    }
+
+    private static String updateButtonLabel() {
+        return isUpdateSimulation() ? "Testar atualização simulada" : "Verificar atualização";
+    }
+
+    private static Path updateDownloadDirectory() {
+        String configured = System.getProperty("orcabem.update.downloadDir");
+        return configured == null || configured.isBlank()
+                ? Path.of(System.getProperty("user.home"), "Downloads")
+                : Path.of(configured);
+    }
+
+    private void showDownloadConfirmationDialog(UpdateService.Release release) {
+        JDialog dialog = new JDialog(this, isUpdateSimulation() ? "Atualização simulada disponível" : "Atualização disponível", true);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        JPanel root = new JPanel(new BorderLayout(0, 15)); root.setBackground(CANVAS);
+        root.setBorder(BorderFactory.createEmptyBorder(22, 24, 20, 24));
+
+        JPanel heading = new JPanel(); heading.setOpaque(false); heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+        JLabel badge = new JLabel(isUpdateSimulation() ? "SIMULAÇÃO LOCAL · NÃO É UMA RELEASE REAL" : "NOVA VERSÃO NO GITHUB"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(ACCENT);
+        JLabel title = new JLabel("OrçaBem " + release.tag()); title.setFont(new Font("Segoe UI", Font.BOLD, 21)); title.setForeground(INK);
+        JLabel comparison = new JLabel("Versão instalada " + APP_VERSION + "  →  versão disponível " + release.tag());
+        comparison.setFont(new Font("Segoe UI", Font.PLAIN, 12)); comparison.setForeground(GREEN);
+        heading.add(badge); heading.add(Box.createVerticalStrut(6)); heading.add(title); heading.add(Box.createVerticalStrut(5)); heading.add(comparison);
+        root.add(heading, BorderLayout.NORTH);
+
+        JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 10));
+        card.setBorder(BorderFactory.createEmptyBorder(15, 16, 14, 16));
+        JLabel notesTitle = new JLabel("Novidades desta versão"); notesTitle.setFont(new Font("Segoe UI", Font.BOLD, 13)); notesTitle.setForeground(INK);
+        String notesText = release.notes().isBlank() ? "O autor não incluiu notas para esta versão." : release.notes().strip();
+        if (notesText.length() > 3500) notesText = notesText.substring(0, 3500) + "\n…";
+        JTextArea notes = new JTextArea(notesText); notes.setEditable(false); notes.setLineWrap(true); notes.setWrapStyleWord(true);
+        notes.setFont(new Font("Segoe UI", Font.PLAIN, 12)); notes.setForeground(INK); notes.setBackground(CARD_ALT);
+        notes.setBorder(BorderFactory.createEmptyBorder(9, 10, 9, 10));
+        JScrollPane notesScroll = new JScrollPane(notes); notesScroll.setBorder(BorderFactory.createLineBorder(BORDER));
+        notesScroll.getViewport().setBackground(CARD_ALT);
+        JPanel noteArea = new JPanel(new BorderLayout(0, 8)); noteArea.setOpaque(false); noteArea.add(notesTitle, BorderLayout.NORTH); noteArea.add(notesScroll, BorderLayout.CENTER);
+
+        String destination = updateDownloadDirectory().toAbsolutePath().toString();
+        String initialStatus = isUpdateSimulation()
+                ? "Teste isolado: o arquivo fictício será salvo em " + destination + ". Ele não é um executável real e não deve ser aberto."
+                : "O arquivo será baixado para " + destination + " e validado por SHA-256. O aplicativo não será substituído enquanto estiver aberto.";
+        JTextArea status = new JTextArea(initialStatus);
+        status.setEditable(false); status.setFocusable(false); status.setOpaque(false); status.setLineWrap(true); status.setWrapStyleWord(true);
+        status.setFont(new Font("Segoe UI", Font.PLAIN, 11)); status.setForeground(MUTED); status.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
+        javax.swing.JProgressBar progress = new javax.swing.JProgressBar(0, 100); progress.setStringPainted(true);
+        progress.setString("Aguardando sua permissão"); progress.setVisible(false); progress.setForeground(ACCENT); progress.setBackground(CARD_ALT); progress.setBorderPainted(false);
+        JPanel feedback = new JPanel(); feedback.setOpaque(false); feedback.setLayout(new BoxLayout(feedback, BoxLayout.Y_AXIS));
+        feedback.add(status); feedback.add(Box.createVerticalStrut(8)); feedback.add(progress);
+        card.add(noteArea, BorderLayout.CENTER); card.add(feedback, BorderLayout.SOUTH); root.add(card, BorderLayout.CENTER);
+
+        JButton cancel = secondaryButton("Agora não"); JButton download = primaryButton("Baixar versão");
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false); actions.add(cancel); actions.add(download); root.add(actions, BorderLayout.SOUTH);
+        boolean[] downloading = {false}; boolean[] completed = {false};
+        cancel.addActionListener(event -> { if (!downloading[0]) dialog.dispose(); });
+        download.addActionListener(event -> {
+            if (completed[0]) { dialog.dispose(); return; }
+            if (downloading[0]) return;
+            downloading[0] = true; download.setEnabled(false); download.setText("Baixando…"); cancel.setEnabled(false);
+            progress.setValue(0); progress.setString("Iniciando…"); progress.setVisible(true);
+            status.setText(isUpdateSimulation()
+                    ? "Baixando o arquivo fictício para teste. Ele não pode ser executado."
+                    : "Baixando OrcaBem.exe. A verificação de integridade será feita antes de salvar o arquivo.");
+            new javax.swing.SwingWorker<Path, Integer>() {
+                @Override protected Path doInBackground() throws Exception {
+                    return UpdateService.download(release, updateDownloadDirectory(), value -> publish(value));
+                }
+
+                @Override protected void process(List<Integer> chunks) {
+                    if (chunks.isEmpty()) return;
+                    int value = chunks.get(chunks.size() - 1); progress.setValue(value); progress.setString(value + "%");
+                }
+
+                @Override protected void done() {
+                    downloading[0] = false;
+                    try {
+                        Path saved = get(); completed[0] = true;
+                        progress.setValue(100); progress.setString("SHA-256 conferido");
+                        String warning = isUpdateSimulation()
+                                ? "\n\nEste arquivo é fictício, não é um executável válido e NÃO deve ser aberto."
+                                : "\n\nO aplicativo não foi fechado nem substituído.";
+                        status.setText("Download verificado e salvo em:\n" + saved.toAbsolutePath() + warning); status.setForeground(GREEN);
+                        download.setText("Concluído"); download.setEnabled(false); cancel.setText("Fechar"); cancel.setEnabled(true);
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt(); downloadFailed("O download foi interrompido.");
+                    } catch (java.util.concurrent.ExecutionException ex) {
+                        Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                        String detail = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+                        downloadFailed(detail);
+                    }
+                }
+
+                private void downloadFailed(String message) {
+                    status.setText("O download não foi concluído: " + message); status.setForeground(RED);
+                    progress.setString("Não concluído"); download.setText("Tentar novamente"); download.setEnabled(true); cancel.setEnabled(true);
+                }
+            }.execute();
+        });
+        dialog.setContentPane(root); dialog.setSize(650, 500); dialog.setMinimumSize(new Dimension(600, 450));
+        dialog.setResizable(false); dialog.setLocationRelativeTo(this); dialog.setVisible(true);
     }
 
     private void refreshPage() {

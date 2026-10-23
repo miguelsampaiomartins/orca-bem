@@ -21,6 +21,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite abrir a pasta local dos dados e importar/exportar CSV na área de privacidade.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
 - Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
+- Verifica a versão estável mais recente no GitHub Releases e, com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir o SHA-256. O app não se substitui nem reinicia automaticamente.
 
 ## Requisitos
 
@@ -33,7 +34,13 @@ O aplicativo usa somente bibliotecas incluídas no JDK, sem Maven ou dependênci
 
 No Windows, dê dois cliques em `OrcaBem.exe` na raiz do repositório. O executável contém o aplicativo e não depende de um arquivo `.bat` para iniciar.
 
-O pacote público foi configurado para manter os dados de teste em `%USERPROFILE%\.orcabem-teste`, separados do diretório legado `%USERPROFILE%\.bolso-claro` usado ao executar o código-fonte sem parâmetros.
+Para preservar os dados criados por cópias anteriores do executável público, o `OrcaBem.exe` continua usando `%USERPROFILE%\.orcabem-teste`. Ao executar o código-fonte sem parâmetros, o padrão segue sendo `%USERPROFILE%\.bolso-claro`; são locais independentes e o app não migra dados entre eles.
+
+## Atualizações
+
+O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo o SHA-256 informado pelo GitHub antes de salvar. O download não instala nem substitui o executável aberto: feche o app e execute o arquivo baixado para concluir a atualização.
+
+Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.2`, anexando o arquivo exatamente como `OrcaBem.exe`. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
 
 ## Ícone
 
@@ -76,6 +83,7 @@ A importação acrescenta os lançamentos aos dados existentes. A exportação i
 ```text
 src/main/java/br/com/bolsoclaro/
   OrcaBemApp.java     interface Swing do OrçaBem e fluxo principal
+  UpdateService.java  consulta Releases públicas e baixa o executável com verificação SHA-256
   AppIcon.java        ícone vetorial do aplicativo, renderizado em vários tamanhos
   Transaction.java    modelo de receita/despesa
   CsvStore.java       armazenamento e leitura/escrita CSV
