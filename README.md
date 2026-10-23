@@ -1,6 +1,6 @@
-# Bolso Claro
+# OrçaBem
 
-Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. A navegação lateral, os cartões e o painel de fluxo de caixa seguem uma organização financeira clara, com identidade própria em verde-floresta, marfim e âmbar. Os dados ficam no próprio computador; não há conta, servidor ou banco em nuvem.
+Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem reúne lançamentos, categorias, orçamentos e metas em um painel simples, com identidade própria em verde-floresta, marfim e âmbar. Os dados ficam no próprio computador; não há conta, servidor ou banco em nuvem.
 
 ## O que faz
 
@@ -36,11 +36,11 @@ No Windows, dê dois cliques em `run.bat`, ou rode no terminal a partir desta pa
 run.bat
 ```
 
-O script compila o código para `build/classes` e inicia a interface gráfica.
+O script compila o código para `build/classes` e inicia o OrçaBem.
 
 ## Ícone
 
-O ícone da janela é desenhado em Java para aparecer na barra de título e na barra de tarefas. O PNG de 256 × 256 está em `favicon.png` e também em `src/main/resources/bolso-claro-icon.png`.
+O ícone da janela é desenhado em Java para aparecer na barra de título e na barra de tarefas. O PNG de 256 × 256 está em `favicon.png` e também em `src/main/resources/orcabem-icon.png`.
 
 ## Armazenamento local
 
@@ -53,7 +53,7 @@ Os arquivos são criados automaticamente em:
 %USERPROFILE%\.bolso-claro\metas.properties
 ```
 
-Para fazer backup, copie essa pasta. Remover os arquivos apaga os dados locais do app.
+O nome legado `.bolso-claro` é mantido intencionalmente para que usuários que atualizem a partir da versão anterior continuem vendo os mesmos dados. Para fazer backup, copie essa pasta. Remover os arquivos apaga os dados locais do app.
 
 ## CSV
 
@@ -71,7 +71,7 @@ A importação acrescenta os lançamentos aos dados existentes. A exportação i
 
 ```text
 src/main/java/br/com/bolsoclaro/
-  BolsoClaroApp.java   interface Swing e fluxo principal
+  OrcaBemApp.java     interface Swing do OrçaBem e fluxo principal
   AppIcon.java        ícone vetorial do aplicativo, renderizado em vários tamanhos
   Transaction.java    modelo de receita/despesa
   CsvStore.java       armazenamento e leitura/escrita CSV
@@ -80,5 +80,5 @@ src/main/java/br/com/bolsoclaro/
   SavingsGoalStore.java metas de economia mensais
   TrendChart.java     gráfico Java2D de fluxo de caixa mensal
 src/main/resources/
-  bolso-claro-icon.png ícone PNG do aplicativo
+  orcabem-icon.png    ícone PNG do aplicativo
 ```

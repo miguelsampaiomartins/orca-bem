@@ -57,6 +57,6 @@ public final class BudgetStore {
 
     private void save() throws IOException {
         Files.createDirectories(file.getParent());
-        try (OutputStream out = Files.newOutputStream(file)) { values.store(out, "Orçamentos do Bolso Claro"); }
+        try (OutputStream out = Files.newOutputStream(file)) { values.store(out, "Orçamentos do OrçaBem"); }
     }
 }

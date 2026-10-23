@@ -50,7 +50,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public final class BolsoClaroApp extends JFrame {
+public final class OrcaBemApp extends JFrame {
     private static final Color INK = new Color(242, 246, 241);
     private static final Color MUTED = new Color(161, 181, 171);
     private static final Color GREEN = new Color(100, 218, 169);
@@ -80,8 +80,8 @@ public final class BolsoClaroApp extends JFrame {
     private final JPanel sidebar = new JPanel();
     private final Map<String, JButton> navButtons = new LinkedHashMap<>();
 
-    public BolsoClaroApp() throws IOException {
-        super("Bolso Claro — seu dinheiro em foco");
+    public OrcaBemApp() throws IOException {
+        super("OrçaBem — seu dinheiro em foco");
         transactions.addAll(CsvStore.load(transactionsFile));
         budgetStore = new BudgetStore(dataDir.resolve("orcamentos.properties"));
         categoryStore = new CategoryStore(dataDir.resolve("categorias.properties"));
@@ -106,8 +106,8 @@ public final class BolsoClaroApp extends JFrame {
         JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); brand.setOpaque(false); brand.setMaximumSize(new Dimension(205, 52));
         JLabel mark = new JLabel(new javax.swing.ImageIcon(AppIcon.render(43)));
         JPanel brandCopy = new JPanel(); brandCopy.setOpaque(false); brandCopy.setLayout(new BoxLayout(brandCopy, BoxLayout.Y_AXIS)); brandCopy.setBorder(BorderFactory.createEmptyBorder(5, 11, 0, 0));
-        JLabel brandName = new JLabel("Bolso Claro"); brandName.setFont(new Font("Segoe UI", Font.BOLD, 15)); brandName.setForeground(INK);
-        JLabel brandTagline = new JLabel("FINANÇAS EM EQUILÍBRIO"); brandTagline.setFont(new Font("Segoe UI", Font.BOLD, 8)); brandTagline.setForeground(ACCENT);
+        JLabel brandName = new JLabel("OrçaBem"); brandName.setFont(new Font("Segoe UI", Font.BOLD, 15)); brandName.setForeground(INK);
+        JLabel brandTagline = new JLabel("SEU DINHEIRO, BEM PLANEJADO"); brandTagline.setFont(new Font("Segoe UI", Font.BOLD, 8)); brandTagline.setForeground(ACCENT);
         brandCopy.add(brandName); brandCopy.add(Box.createVerticalStrut(3)); brandCopy.add(brandTagline); brand.add(mark); brand.add(brandCopy);
         brand.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(brand); sidebar.add(Box.createVerticalStrut(31));
         addNav("dashboard", "⌂", "Visão geral");
@@ -409,7 +409,7 @@ public final class BolsoClaroApp extends JFrame {
         privacyCard.setBorder(BorderFactory.createCompoundBorder(privacyCard.getBorder(), BorderFactory.createEmptyBorder(22, 24, 22, 24))); privacyCard.setAlignmentX(Component.LEFT_ALIGNMENT); privacyCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 360));
         JLabel badge = new JLabel("●  ARMAZENAMENTO LOCAL"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(GREEN);
         JLabel heading = new JLabel("Seus dados ficam com você."); heading.setFont(new Font("Segoe UI", Font.BOLD, 19)); heading.setForeground(INK);
-        JLabel explanation = new JLabel("<html><div style='width:760px'>O Bolso Claro salva seus lançamentos neste computador. Não é necessária uma conta e os dados não são enviados a um servidor.</div></html>"); explanation.setFont(new Font("Segoe UI", Font.PLAIN, 12)); explanation.setForeground(MUTED);
+        JLabel explanation = new JLabel("<html><div style='width:760px'>O OrçaBem salva seus lançamentos neste computador. Não é necessária uma conta e os dados não são enviados a um servidor.</div></html>"); explanation.setFont(new Font("Segoe UI", Font.PLAIN, 12)); explanation.setForeground(MUTED);
         badge.setAlignmentX(Component.LEFT_ALIGNMENT); heading.setAlignmentX(Component.LEFT_ALIGNMENT); explanation.setAlignmentX(Component.LEFT_ALIGNMENT);
         JTextArea location = new JTextArea(dataDir.toString()); location.setRows(2); location.setColumns(72); location.setEditable(false); location.setLineWrap(true); location.setWrapStyleWord(true); location.setBackground(CARD_ALT); location.setForeground(INK); location.setBorder(BorderFactory.createEmptyBorder(9, 11, 9, 11)); location.setPreferredSize(new Dimension(700, 52)); location.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52)); location.setAlignmentX(Component.LEFT_ALIGNMENT);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 9, 0)); actions.setOpaque(false); actions.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -690,7 +690,7 @@ public final class BolsoClaroApp extends JFrame {
     }
 
     private void exportCsv() {
-        JFileChooser chooser = new JFileChooser(); chooser.setDialogTitle("Exportar todos os lançamentos"); chooser.setSelectedFile(new java.io.File("bolso-claro-lancamentos.csv"));
+        JFileChooser chooser = new JFileChooser(); chooser.setDialogTitle("Exportar todos os lançamentos"); chooser.setSelectedFile(new java.io.File("orcabem-lancamentos.csv"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
         Path file = chooser.getSelectedFile().toPath();
         if (!file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".csv")) file = file.resolveSibling(file.getFileName() + ".csv");
@@ -846,7 +846,7 @@ public final class BolsoClaroApp extends JFrame {
     public static void main(String[] args) {
         try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) { }
         SwingUtilities.invokeLater(() -> {
-            try { new BolsoClaroApp().setVisible(true); }
+            try { new OrcaBemApp().setVisible(true); }
             catch (IOException ex) { JOptionPane.showMessageDialog(null, "Não foi possível carregar os dados locais: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE); }
         });
     }

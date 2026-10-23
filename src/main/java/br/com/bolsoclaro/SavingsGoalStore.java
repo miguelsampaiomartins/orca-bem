@@ -31,6 +31,6 @@ public final class SavingsGoalStore {
         else values.setProperty(month.toString(), value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
         Path parent = file.toAbsolutePath().getParent();
         if (parent != null) Files.createDirectories(parent);
-        try (OutputStream out = Files.newOutputStream(file)) { values.store(out, "Metas de economia do Bolso Claro"); }
+        try (OutputStream out = Files.newOutputStream(file)) { values.store(out, "Metas de economia do OrçaBem"); }
     }
 }

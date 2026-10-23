@@ -9,7 +9,7 @@ if errorlevel 1 (
 )
 if not exist build\classes mkdir build\classes
 javac -encoding UTF-8 -d "build\classes" ^
-  "src\main\java\br\com\bolsoclaro\BolsoClaroApp.java" ^
+  "src\main\java\br\com\bolsoclaro\OrcaBemApp.java" ^
   "src\main\java\br\com\bolsoclaro\BudgetStore.java" ^
   "src\main\java\br\com\bolsoclaro\CategoryStore.java" ^
   "src\main\java\br\com\bolsoclaro\CsvStore.java" ^
@@ -18,10 +18,10 @@ javac -encoding UTF-8 -d "build\classes" ^
   "src\main\java\br\com\bolsoclaro\TrendChart.java" ^
   "src\main\java\br\com\bolsoclaro\AppIcon.java"
 if errorlevel 1 (
-  echo Falha ao compilar o Bolso Claro.
+  echo Falha ao compilar o OrcaBem.
   if /i "%~1"=="--compile-only" exit /b 1
   pause
   exit /b 1
 )
 if /i "%~1"=="--compile-only" exit /b 0
-java -cp "build\classes" br.com.bolsoclaro.BolsoClaroApp
+java -cp "build\classes" br.com.bolsoclaro.OrcaBemApp

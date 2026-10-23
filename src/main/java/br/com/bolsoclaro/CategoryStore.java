@@ -89,7 +89,7 @@ public final class CategoryStore {
         }
         Path parent = file.toAbsolutePath().getParent();
         if (parent != null) Files.createDirectories(parent);
-        try (Writer writer = Files.newBufferedWriter(file, java.nio.charset.StandardCharsets.UTF_8)) { props.store(writer, "Categorias do Bolso Claro"); }
+        try (Writer writer = Files.newBufferedWriter(file, java.nio.charset.StandardCharsets.UTF_8)) { props.store(writer, "Categorias do OrçaBem"); }
     }
 
     private static String prefix(Transaction.Type type) { return type == Transaction.Type.EXPENSE ? "expense" : "income"; }

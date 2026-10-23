@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Vetor reutilizável para o ícone do Bolso Claro, renderizado sem dependências externas. */
+/** Vetor reutilizável para o ícone do OrçaBem, renderizado sem dependências externas. */
 public final class AppIcon {
     private static final Color FOREST = new Color(16, 43, 40);
     private static final Color FOREST_LIGHT = new Color(27, 75, 63);
@@ -63,7 +63,7 @@ public final class AppIcon {
     }
 
     public static void main(String[] args) throws IOException {
-        Path output = args.length > 0 ? Path.of(args[0]) : Path.of("src", "main", "resources", "bolso-claro-icon.png");
+        Path output = args.length > 0 ? Path.of(args[0]) : Path.of("src", "main", "resources", "orcabem-icon.png");
         Path parent = output.toAbsolutePath().getParent();
         if (parent != null) java.nio.file.Files.createDirectories(parent);
         ImageIO.write(render(256), "png", output.toFile());
