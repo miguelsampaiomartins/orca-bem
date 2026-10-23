@@ -24,20 +24,16 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 
 ## Requisitos
 
-- Java 17 ou superior, com `javac` disponível no `PATH`.
-- Windows: execute `run.bat`.
+- Java 17 ou superior instalado para abrir o executável do Windows.
+- JDK 17 ou superior para compilar o código-fonte Java.
 
 O aplicativo usa somente bibliotecas incluídas no JDK, sem Maven ou dependências externas.
 
 ## Executar
 
-No Windows, dê dois cliques em `run.bat`, ou rode no terminal a partir desta pasta:
+No Windows, dê dois cliques em `OrcaBem.exe` na raiz do repositório. O executável contém o aplicativo e não depende de um arquivo `.bat` para iniciar.
 
-```bat
-run.bat
-```
-
-O script compila o código para `build/classes` e inicia o OrçaBem.
+O pacote público foi configurado para manter os dados de teste em `%USERPROFILE%\.orcabem-teste`, separados do diretório legado `%USERPROFILE%\.bolso-claro` usado ao executar o código-fonte sem parâmetros.
 
 ## Ícone
 
