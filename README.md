@@ -12,7 +12,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
 - Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
-- Permite criar perfis locais independentes e alternar entre eles; lançamentos, orçamentos, categorias, metas e investimentos ficam separados por perfil.
+- Permite criar, alternar e excluir perfis locais independentes; use o botão `−` ao lado do seletor para gerenciar e excluir um perfil inativo. A exclusão pede confirmação e remove os dados daquele perfil. O perfil ativo e o perfil Pessoal (que conserva os dados legados) são protegidos.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
 - Salva automaticamente os dados do perfil ativo somente neste computador.
@@ -21,7 +21,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite abrir a pasta local dos dados e importar/exportar CSV na área de privacidade.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
 - Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
-- Verifica a versão estável mais recente no GitHub Releases e, com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir automaticamente a integridade do arquivo. O app não se substitui nem reinicia automaticamente.
+- Verifica a versão estável mais recente no GitHub Releases e, com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir automaticamente a integridade do arquivo. A partir da v1.0.4, é possível instalar e reiniciar pelo app; versões antigas exigem abrir manualmente a primeira atualização.
 
 ## Requisitos
 
@@ -40,7 +40,7 @@ Para preservar os dados criados por cópias anteriores do executável público, 
 
 O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo automaticamente a integridade antes de salvar. A partir da v1.0.4, **Instalar e reiniciar** fecha o app, substitui o executável em execução e abre a nova versão. Se o Windows não permitir a substituição na pasta atual, o instalador abre o executável baixado para uso manual. As versões anteriores à v1.0.4 não têm essa etapa de instalação: para fazer essa primeira atualização, abra manualmente o `.exe` baixado; as próximas poderão usar o botão de instalação.
 
-Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.5`, anexando o arquivo exatamente como `OrcaBem.exe`. O executável deve receber a propriedade Launch4j `-Dlaunch4j.exefile="%EXEFILE%"` para identificar o caminho de instalação. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
+Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.6`, anexando o arquivo exatamente como `OrcaBem.exe`. O executável deve receber a propriedade Launch4j `-Dlaunch4j.exefile="%EXEFILE%"` para identificar o caminho de instalação. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
 
 ## Ícone
 
@@ -91,7 +91,7 @@ src/main/java/br/com/bolsoclaro/
   BudgetStore.java    persistência de limites por mês e categoria
   CategoryStore.java  categorias pessoais de receitas e despesas
   SavingsGoalStore.java metas de economia mensais
-  ProfileStore.java   catálogo de perfis locais independentes
+  ProfileStore.java   catálogo e exclusão segura de perfis locais independentes
   InvestmentStore.java histórico local de aportes e resgates
   TrendChart.java     gráfico Java2D de fluxo de caixa mensal
 src/main/resources/

@@ -3,8 +3,11 @@ package br.com.bolsoclaro;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -56,6 +59,61 @@ public final class ProfileStore {
         save();
     }
 
+    /** Deletes an inactive, non-legacy profile and returns false only if leftover files could not be cleaned up. */
+    public boolean delete(Profile requested) throws IOException {
+        if (requested == null) throw new IllegalArgumentException("Selecione um perfil.");
+        int index = -1;
+        for (int i = 0; i < profiles.size(); i++) if (profiles.get(i).id().equals(requested.id())) { index = i; break; }
+        if (index < 0) throw new IllegalArgumentException("Esse perfil não existe mais.");
+        Profile profile = profiles.get(index);
+        if (DEFAULT_ID.equals(profile.id())) throw new IllegalArgumentException("O perfil Pessoal contém os dados legados e não pode ser excluído.");
+        if (profile.id().equals(activeId)) throw new IllegalArgumentException("Troque para outro perfil antes de excluir este perfil.");
+
+        Path profilesDirectory = root.resolve("profiles").toAbsolutePath().normalize();
+        Path dataDirectory = directory(profile).toAbsolutePath().normalize();
+        if (Files.isSymbolicLink(profilesDirectory)) throw new IOException("A pasta de perfis foi redirecionada; a exclusão foi cancelada por segurança.");
+        if (!dataDirectory.startsWith(profilesDirectory) || dataDirectory.equals(profilesDirectory))
+            throw new IOException("O caminho dos dados do perfil não é seguro para exclusão.");
+        Path quarantine = profilesDirectory.resolve(".deleting-" + profile.id() + "-" + UUID.randomUUID()).normalize();
+        boolean moved = false;
+        if (Files.exists(dataDirectory, LinkOption.NOFOLLOW_LINKS)) {
+            Files.createDirectories(profilesDirectory);
+            move(dataDirectory, quarantine);
+            moved = true;
+        }
+
+        profiles.remove(index);
+        try {
+            save();
+        } catch (IOException ex) {
+            profiles.add(index, profile);
+            if (moved) {
+                try { move(quarantine, dataDirectory); }
+                catch (IOException rollback) { ex.addSuppressed(rollback); }
+            }
+            throw ex;
+        }
+        if (!moved) return true;
+        try {
+            deleteTree(quarantine);
+            return true;
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private static void move(Path source, Path target) throws IOException {
+        try { Files.move(source, target, StandardCopyOption.ATOMIC_MOVE); }
+        catch (AtomicMoveNotSupportedException ex) { Files.move(source, target); }
+    }
+
+    private static void deleteTree(Path directory) throws IOException {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+        }
+    }
+
     private void load() throws IOException {
         Files.createDirectories(root);
         boolean changed = false;
@@ -94,7 +152,14 @@ public final class ProfileStore {
             properties.setProperty("profile." + i + ".id", profile.id());
             properties.setProperty("profile." + i + ".name", profile.name());
         }
-        try (OutputStream out = Files.newOutputStream(indexFile)) { properties.store(out, "Perfis locais do OrcaBem"); }
+        Path temporary = Files.createTempFile(root, "profiles-", ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(temporary)) { properties.store(out, "Perfis locais do OrcaBem"); }
+            try { Files.move(temporary, indexFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+            catch (AtomicMoveNotSupportedException ex) { Files.move(temporary, indexFile, StandardCopyOption.REPLACE_EXISTING); }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     private static boolean isUuid(String value) {

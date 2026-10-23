@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.4";
+    private static final String APP_VERSION = "1.0.5";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -154,6 +154,76 @@ public final class OrcaBemApp extends JFrame {
         }
     }
 
+    private void manageProfilesDialog() {
+        JDialog dialog = new JDialog(this, "Gerenciar perfis", true);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        JPanel root = new JPanel(new BorderLayout(0, 14)); root.setBackground(CANVAS);
+        root.setBorder(BorderFactory.createEmptyBorder(20, 22, 18, 22));
+        JLabel title = new JLabel("Perfis neste computador"); title.setFont(new Font("Segoe UI", Font.BOLD, 18)); title.setForeground(INK);
+        JLabel description = new JLabel("Escolha um perfil inativo para removê-lo. A exclusão dos dados não pode ser desfeita.");
+        description.setFont(new Font("Segoe UI", Font.PLAIN, 11)); description.setForeground(MUTED);
+        JPanel heading = new JPanel(); heading.setOpaque(false); heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+        heading.add(title); heading.add(Box.createVerticalStrut(5)); heading.add(description);
+
+        JPanel card = new JPanel(new BorderLayout(0, 8)); card.setBackground(CARD);
+        card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(14, 14, 14, 14)));
+        JLabel chooserLabel = new JLabel("Perfil"); chooserLabel.setFont(new Font("Segoe UI", Font.BOLD, 11)); chooserLabel.setForeground(MUTED);
+        ThemeComboBox<ProfileStore.Profile> chooser = new ThemeComboBox<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new));
+        chooser.setSelectedItem(activeProfile); styleInput(chooser); chooser.setPreferredSize(new Dimension(300, 36));
+        chooser.setRenderer((list, value, index, selected, focus) -> {
+            JLabel item = new JLabel(value == null ? "" : value.name() + (value.id().equals(activeProfile.id()) ? "  ·  em uso" : ""));
+            item.setOpaque(true); item.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
+            item.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            item.setForeground(selected ? INK : MUTED); item.setBackground(selected ? CARD_ALT : CARD);
+            return item;
+        });
+        JPanel chooserField = new JPanel(new BorderLayout(0, 6)); chooserField.setOpaque(false);
+        chooserField.add(chooserLabel, BorderLayout.NORTH); chooserField.add(chooser, BorderLayout.CENTER);
+        JLabel status = new JLabel(" "); status.setFont(new Font("Segoe UI", Font.PLAIN, 11)); status.setForeground(MUTED);
+        card.add(chooserField, BorderLayout.NORTH); card.add(status, BorderLayout.SOUTH);
+
+        JButton delete = secondaryButton("Excluir perfil"); JButton close = secondaryButton("Fechar");
+        Runnable updateDeleteState = () -> {
+            ProfileStore.Profile selected = (ProfileStore.Profile) chooser.getSelectedItem();
+            boolean personal = selected != null && "default".equals(selected.id());
+            boolean active = selected != null && selected.id().equals(activeProfile.id());
+            delete.setEnabled(selected != null && !personal && !active);
+            if (personal) { status.setText("O perfil Pessoal mantém os dados legados e não pode ser excluído."); status.setForeground(MUTED); }
+            else if (active) { status.setText("Troque para outro perfil antes de excluir o perfil que está em uso."); status.setForeground(MUTED); }
+            else { status.setText("Movimentações, orçamentos, categorias, metas e investimentos deste perfil serão apagados."); status.setForeground(MUTED); }
+        };
+        chooser.addActionListener(event -> updateDeleteState.run());
+        delete.addActionListener(event -> {
+            ProfileStore.Profile selected = (ProfileStore.Profile) chooser.getSelectedItem();
+            if (selected == null || !delete.isEnabled()) return;
+            int choice = JOptionPane.showOptionDialog(dialog,
+                    "Excluir o perfil ‘" + selected.name() + "’ e todos os dados guardados nele?\n\nEssa ação é permanente e não pode ser desfeita.",
+                    "Confirmar exclusão", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null,
+                    new Object[]{"Cancelar", "Excluir perfil"}, "Cancelar");
+            if (choice != 1) return;
+            try {
+                boolean cleaned = profileStore.delete(selected);
+                refreshProfileChooser();
+                chooser.setModel(new DefaultComboBoxModel<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new)));
+                ProfileStore.Profile nextSelection = profileStore.profiles().stream()
+                        .filter(profile -> !"default".equals(profile.id()) && !profile.id().equals(activeProfile.id()))
+                        .findFirst().orElse(activeProfile);
+                chooser.setSelectedItem(nextSelection);
+                updateDeleteState.run();
+                if (cleaned) { status.setText("Perfil e dados excluídos."); status.setForeground(GREEN); }
+                else { status.setText("Perfil removido da lista, mas alguns arquivos temporários ficaram na pasta local. Verifique a pasta de dados antes de liberar espaço."); status.setForeground(ACCENT); }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "Não foi possível excluir o perfil: " + ex.getMessage(), "Exclusão não concluída", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        close.addActionListener(event -> dialog.dispose());
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
+        actions.add(close); actions.add(delete);
+        root.add(heading, BorderLayout.NORTH); root.add(card, BorderLayout.CENTER); root.add(actions, BorderLayout.SOUTH);
+        dialog.setContentPane(root); dialog.setSize(510, 235); dialog.setMinimumSize(new Dimension(480, 220)); dialog.setLocationRelativeTo(this);
+        updateDeleteState.run(); dialog.setVisible(true);
+    }
+
     private void refreshProfileChooser() {
         if (profileChooser == null) return;
         suppressProfileSelection = true;
@@ -164,7 +234,7 @@ public final class OrcaBemApp extends JFrame {
 
     private JPanel buildSidebar() {
         sidebar.setBackground(SIDEBAR);
-        sidebar.setPreferredSize(new Dimension(232, 0));
+        sidebar.setPreferredSize(new Dimension(248, 0));
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
         sidebar.setBorder(BorderFactory.createEmptyBorder(22, 16, 18, 16));
         JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); brand.setOpaque(false); brand.setMaximumSize(new Dimension(205, 52));
@@ -177,15 +247,17 @@ public final class OrcaBemApp extends JFrame {
         JLabel profileLabel = new JLabel("PERFIL ATIVO"); profileLabel.setFont(new Font("Segoe UI", Font.BOLD, 9)); profileLabel.setForeground(MUTED);
         profileLabel.setAlignmentX(Component.LEFT_ALIGNMENT); sidebar.add(profileLabel); sidebar.add(Box.createVerticalStrut(6));
         profileChooser = new ThemeComboBox<>(profileStore.profiles().toArray(ProfileStore.Profile[]::new));
-        profileChooser.setSelectedItem(activeProfile); profileChooser.setPreferredSize(new Dimension(150, 35)); profileChooser.setMaximumSize(new Dimension(150, 35)); styleInput(profileChooser);
+        profileChooser.setSelectedItem(activeProfile); profileChooser.setPreferredSize(new Dimension(132, 35)); profileChooser.setMaximumSize(new Dimension(132, 35)); styleInput(profileChooser);
         profileChooser.addActionListener(e -> {
             Object selected = profileChooser.getSelectedItem();
             if (!suppressProfileSelection && selected instanceof ProfileStore.Profile profile && activeProfile != null && !profile.id().equals(activeProfile.id())) activateProfile(profile);
         });
-        JButton newProfile = secondaryButton("+"); newProfile.setToolTipText("Criar perfil independente"); newProfile.setPreferredSize(new Dimension(34, 35));
+        JButton newProfile = secondaryButton("+"); newProfile.setToolTipText("Criar perfil independente"); newProfile.setPreferredSize(new Dimension(28, 35));
         newProfile.addActionListener(e -> createProfileDialog());
+        JButton manageProfiles = secondaryButton("−"); manageProfiles.setToolTipText("Gerenciar e excluir perfis existentes"); manageProfiles.setPreferredSize(new Dimension(28, 35));
+        manageProfiles.addActionListener(e -> manageProfilesDialog());
         JPanel profileRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); profileRow.setOpaque(false); profileRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        profileRow.add(profileChooser); profileRow.add(newProfile); sidebar.add(profileRow); sidebar.add(Box.createVerticalStrut(22));
+        profileRow.add(profileChooser); profileRow.add(newProfile); profileRow.add(manageProfiles); sidebar.add(profileRow); sidebar.add(Box.createVerticalStrut(22));
         addNav("dashboard", "Visão geral");
         addNav("transactions", "Lançamentos");
         addNav("budgets", "Orçamentos");
