@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.3";
+    private static final String APP_VERSION = "1.0.4";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -339,7 +339,7 @@ public final class OrcaBemApp extends JFrame {
         String destination = updateDownloadDirectory().toAbsolutePath().toString();
         String initialStatus = isUpdateSimulation()
                 ? "Teste isolado: o arquivo fictício será salvo em " + destination + ". Ele não é um executável real e não deve ser aberto."
-                : "O arquivo será baixado para " + destination + " e conferido automaticamente antes de ser salvo. Depois, feche o app e abra o arquivo baixado.";
+                : "O arquivo será baixado para " + destination + " e conferido automaticamente. Depois, escolha Instalar e reiniciar para atualizar este app.";
         JTextArea status = new JTextArea(initialStatus);
         status.setEditable(false); status.setFocusable(false); status.setOpaque(false); status.setLineWrap(true); status.setWrapStyleWord(true);
         status.setFont(new Font("Segoe UI", Font.PLAIN, 11)); status.setForeground(MUTED); status.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
@@ -352,9 +352,31 @@ public final class OrcaBemApp extends JFrame {
         JButton cancel = secondaryButton("Agora não"); JButton download = primaryButton("Baixar versão");
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false); actions.add(cancel); actions.add(download); root.add(actions, BorderLayout.SOUTH);
         boolean[] downloading = {false}; boolean[] completed = {false};
+        Path[] downloadedFile = {null}; Path[] installedExecutable = {UpdateInstaller.currentExecutable()};
         cancel.addActionListener(event -> { if (!downloading[0]) dialog.dispose(); });
         download.addActionListener(event -> {
-            if (completed[0]) { dialog.dispose(); return; }
+            if (completed[0]) {
+                if (isUpdateSimulation()) { dialog.dispose(); return; }
+                if (installedExecutable[0] == null) {
+                    try {
+                        java.awt.Desktop.getDesktop().open(updateDownloadDirectory().toFile());
+                        status.setText("Não consegui identificar o executável que está aberto. A nova versão continua salva em:\n" + downloadedFile[0] + "\n\nFeche este app e abra o arquivo baixado manualmente.");
+                    } catch (Exception ex) {
+                        status.setText("A nova versão está salva em:\n" + downloadedFile[0] + "\n\nFeche este app e abra o arquivo baixado manualmente.");
+                    }
+                    status.setForeground(GREEN); return;
+                }
+                try {
+                    UpdateInstaller.startAfterExit(downloadedFile[0], installedExecutable[0], ProcessHandle.current().pid());
+                    dialog.dispose();
+                    OrcaBemApp.this.dispose();
+                    System.exit(0);
+                } catch (Exception ex) {
+                    status.setText("Não consegui preparar a instalação automática: " + ex.getMessage() + "\n\nO arquivo continua salvo em:\n" + downloadedFile[0]);
+                    status.setForeground(RED); download.setText("Tentar instalar novamente"); cancel.setText("Fechar");
+                }
+                return;
+            }
             if (downloading[0]) return;
             downloading[0] = true; download.setEnabled(false); download.setText("Baixando…"); cancel.setEnabled(false);
             progress.setValue(0); progress.setString("Iniciando…"); progress.setVisible(true);
@@ -374,13 +396,21 @@ public final class OrcaBemApp extends JFrame {
                 @Override protected void done() {
                     downloading[0] = false;
                     try {
-                        Path saved = get(); completed[0] = true;
-                        progress.setValue(100); progress.setString("Arquivo conferido");
-                        String warning = isUpdateSimulation()
-                                ? "\n\nEste arquivo é fictício, não é um executável válido e NÃO deve ser aberto."
-                                : "\n\nFeche o OrçaBem e abra este arquivo para usar a nova versão.";
-                        status.setText("Atualização baixada e conferida. Arquivo salvo em:\n" + saved.toAbsolutePath() + warning); status.setForeground(GREEN);
-                        download.setText("Concluído"); download.setEnabled(false); cancel.setText("Fechar"); cancel.setEnabled(true);
+                        Path saved = get(); completed[0] = true; downloadedFile[0] = saved;
+                        installedExecutable[0] = UpdateInstaller.currentExecutable();
+                        progress.setValue(100); progress.setString(isUpdateSimulation() ? "Teste concluído" : "Pronto para instalar");
+                        String nextStep;
+                        if (isUpdateSimulation()) {
+                            nextStep = "\n\nEste arquivo é fictício, não é um executável válido e NÃO deve ser aberto.";
+                        } else if (installedExecutable[0] != null) {
+                            nextStep = "\n\nClique em “Instalar e reiniciar” para substituir esta versão. O app será fechado e aberto novamente com a atualização.";
+                        } else {
+                            nextStep = "\n\nFeche o app e abra o executável baixado para concluir a atualização.";
+                        }
+                        status.setText("Atualização baixada e conferida. Arquivo salvo em:\n" + saved.toAbsolutePath() + nextStep); status.setForeground(GREEN);
+                        if (isUpdateSimulation()) { download.setText("Teste concluído"); download.setEnabled(false); cancel.setText("Fechar"); }
+                        else { download.setText(installedExecutable[0] == null ? "Abrir Downloads" : "Instalar e reiniciar"); download.setEnabled(true); cancel.setText(installedExecutable[0] == null ? "Fechar" : "Instalar depois"); }
+                        cancel.setEnabled(true);
                     } catch (InterruptedException ex) {
                         Thread.currentThread().interrupt(); downloadFailed("O download foi interrompido.");
                     } catch (java.util.concurrent.ExecutionException ex) {

@@ -38,9 +38,9 @@ Para preservar os dados criados por cópias anteriores do executável público, 
 
 ## Atualizações
 
-O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo automaticamente a integridade antes de salvar. Ao terminar, indica o caminho do arquivo; feche o app e abra o executável baixado para concluir a atualização.
+O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo automaticamente a integridade antes de salvar. A partir da v1.0.4, **Instalar e reiniciar** fecha o app, substitui o executável em execução e abre a nova versão. Se o Windows não permitir a substituição na pasta atual, o instalador abre o executável baixado para uso manual. As versões anteriores à v1.0.4 não têm essa etapa de instalação: para fazer essa primeira atualização, abra manualmente o `.exe` baixado; as próximas poderão usar o botão de instalação.
 
-Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.4`, anexando o arquivo exatamente como `OrcaBem.exe`. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
+Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.5`, anexando o arquivo exatamente como `OrcaBem.exe`. O executável deve receber a propriedade Launch4j `-Dlaunch4j.exefile="%EXEFILE%"` para identificar o caminho de instalação. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
 
 ## Ícone
 
@@ -84,6 +84,7 @@ A importação acrescenta os lançamentos aos dados existentes. A exportação i
 src/main/java/br/com/bolsoclaro/
   OrcaBemApp.java     interface Swing do OrçaBem e fluxo principal
   UpdateService.java  consulta Releases públicas e baixa o executável com conferência de integridade
+  UpdateInstaller.java substitui e reinicia o executável após o processo atual encerrar
   AppIcon.java        ícone vetorial do aplicativo, renderizado em vários tamanhos
   Transaction.java    modelo de receita/despesa
   CsvStore.java       armazenamento e leitura/escrita CSV
