@@ -65,7 +65,7 @@ public final class OrcaBemApp extends JFrame {
     private static final Color SIDEBAR = new Color(8, 22, 20);
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.1";
+    private static final String APP_VERSION = "1.0.2";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -79,8 +79,14 @@ public final class OrcaBemApp extends JFrame {
     private InvestmentStore investmentStore;
     private javax.swing.JComboBox<ProfileStore.Profile> profileChooser;
     private boolean suppressProfileSelection;
-    private boolean cashFlowAllTime;
-    private boolean investmentAllTime = true;
+    enum ChartRange {
+        CURRENT("Atual", 1), THREE_MONTHS("3 meses", 3), SIX_MONTHS("6 meses", 6), ALL_TIME("Todo", 0);
+        final String label;
+        final int monthCount;
+        ChartRange(String label, int monthCount) { this.label = label; this.monthCount = monthCount; }
+    }
+    private ChartRange cashFlowRange = ChartRange.SIX_MONTHS;
+    private ChartRange investmentRange = ChartRange.ALL_TIME;
     private YearMonth selectedMonth = YearMonth.now();
     private String currentPage = "dashboard";
     private final JPanel pageHost = new JPanel(new CardLayout());
@@ -539,10 +545,8 @@ public final class OrcaBemApp extends JFrame {
     private JPanel trendCard() {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 6)); card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(17, 18, 11, 14)));
         JPanel header = new JPanel(); header.setOpaque(false); header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-        header.add(sectionHeading("Fluxo de caixa ao longo do tempo", cashFlowAllTime ? "Todo o histórico registrado" : "Seis meses de entradas e saídas"));
-        JPanel controls = rangeControls(cashFlowAllTime,
-                () -> { cashFlowAllTime = false; refreshPage(); },
-                () -> { cashFlowAllTime = true; refreshPage(); });
+        header.add(sectionHeading("Fluxo de caixa ao longo do tempo", chartPeriodDescription(cashFlowRange, selectedMonth)));
+        JPanel controls = rangeControls(cashFlowRange, range -> { cashFlowRange = range; refreshPage(); });
         controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 9, 3)); legend.setOpaque(false);
         JLabel incomeLegend = new JLabel("● Receitas"); incomeLegend.setForeground(GREEN); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
@@ -554,11 +558,13 @@ public final class OrcaBemApp extends JFrame {
         card.add(chart, BorderLayout.CENTER); return card;
     }
 
-    private JPanel rangeControls(boolean allTime, Runnable sixMonthsAction, Runnable allTimeAction) {
+    private JPanel rangeControls(ChartRange selected, java.util.function.Consumer<ChartRange> onSelect) {
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0)); controls.setOpaque(false);
-        JButton recent = rangeButton("6 meses", !allTime, sixMonthsAction);
-        JButton all = rangeButton("Todo", allTime, allTimeAction);
-        controls.add(recent); controls.add(all); return controls;
+        for (ChartRange range : ChartRange.values()) {
+            JButton option = rangeButton(range.label, range == selected, () -> onSelect.accept(range));
+            controls.add(option);
+        }
+        return controls;
     }
 
     private JButton rangeButton(String label, boolean selected, Runnable action) {
@@ -567,34 +573,45 @@ public final class OrcaBemApp extends JFrame {
         button.addActionListener(e -> action.run()); return button;
     }
 
+    private String chartPeriodDescription(ChartRange range, YearMonth end) {
+        return switch (range) {
+            case CURRENT -> "Somente " + monthName(end);
+            case THREE_MONTHS -> "Últimos 3 meses até " + monthName(end);
+            case SIX_MONTHS -> "Últimos 6 meses até " + monthName(end);
+            case ALL_TIME -> "Todo o histórico registrado";
+        };
+    }
+
     private List<YearMonth> cashFlowMonths() {
-        if (!cashFlowAllTime || transactions.isEmpty()) return recentMonths(selectedMonth);
-        YearMonth first = transactions.stream().map(t -> YearMonth.from(t.getDate())).min(YearMonth::compareTo).orElse(selectedMonth);
-        YearMonth last = transactions.stream().map(t -> YearMonth.from(t.getDate())).max(YearMonth::compareTo).orElse(selectedMonth);
-        if (selectedMonth.isAfter(last)) last = selectedMonth;
-        return monthsBetween(first, last);
+        List<YearMonth> recorded = transactions.stream().map(t -> YearMonth.from(t.getDate())).toList();
+        return monthsForRange(cashFlowRange, selectedMonth, recorded);
     }
 
     private List<YearMonth> investmentMonths() {
-        List<InvestmentStore.Movement> movements = investmentStore.movements();
-        if (!investmentAllTime || movements.isEmpty()) return recentMonths(YearMonth.now());
-        YearMonth first = movements.stream().map(m -> YearMonth.from(m.date())).min(YearMonth::compareTo).orElse(YearMonth.now());
-        YearMonth last = movements.stream().map(m -> YearMonth.from(m.date())).max(YearMonth::compareTo).orElse(YearMonth.now());
-        if (YearMonth.now().isAfter(last)) last = YearMonth.now();
+        List<YearMonth> recorded = investmentStore.movements().stream().map(m -> YearMonth.from(m.date())).toList();
+        return monthsForRange(investmentRange, YearMonth.now(), recorded);
+    }
+
+    static List<YearMonth> monthsForRange(ChartRange range, YearMonth end, List<YearMonth> recordedMonths) {
+        if (range != ChartRange.ALL_TIME) return recentMonths(end, range.monthCount);
+        if (recordedMonths.isEmpty()) return recentMonths(end, 6);
+        YearMonth first = recordedMonths.stream().min(YearMonth::compareTo).orElse(end);
+        YearMonth last = recordedMonths.stream().max(YearMonth::compareTo).orElse(end);
+        if (end.isAfter(last)) last = end;
         return monthsBetween(first, last);
     }
 
-    private List<YearMonth> recentMonths(YearMonth end) {
+    private static List<YearMonth> recentMonths(YearMonth end, int count) {
         List<YearMonth> months = new ArrayList<>();
-        for (int i = 5; i >= 0; i--) months.add(end.minusMonths(i));
+        for (int i = count - 1; i >= 0; i--) months.add(end.minusMonths(i));
         return months;
     }
 
-    private List<YearMonth> monthsBetween(YearMonth first, YearMonth last) {
+    private static List<YearMonth> monthsBetween(YearMonth first, YearMonth last) {
         List<YearMonth> months = new ArrayList<>();
         YearMonth month = first;
         while (!month.isAfter(last) && months.size() < 2400) { months.add(month); month = month.plusMonths(1); }
-        if (months.isEmpty()) return recentMonths(last);
+        if (months.isEmpty()) return recentMonths(last, 6);
         return months;
     }
 
@@ -720,12 +737,10 @@ public final class OrcaBemApp extends JFrame {
     private JPanel investmentChartCard() {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 7));
         card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(16, 18, 12, 18)));
-        JPanel header = new JPanel(new BorderLayout(10, 0)); header.setOpaque(false);
-        String period = investmentAllTime ? "Todo o histórico" : "Últimos seis meses";
-        header.add(sectionHeading("Evolução do saldo investido", period), BorderLayout.WEST);
-        header.add(rangeControls(investmentAllTime,
-                () -> { investmentAllTime = false; refreshPage(); },
-                () -> { investmentAllTime = true; refreshPage(); }), BorderLayout.EAST);
+        JPanel header = new JPanel(); header.setOpaque(false); header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.add(sectionHeading("Evolução do saldo investido", chartPeriodDescription(investmentRange, YearMonth.now())));
+        JPanel controls = rangeControls(investmentRange, range -> { investmentRange = range; refreshPage(); });
+        controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         card.add(header, BorderLayout.NORTH);
         TrendChart chart = new TrendChart();
         chart.setData(investmentMonths(), month -> investmentStore.balanceAt(month.atEndOfMonth()));

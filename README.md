@@ -7,11 +7,11 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Registra receitas e despesas com data, categoria, descrição opcional e valor.
 - Permite editar ou excluir um lançamento selecionado e pesquisar por descrição ou categoria.
 - Apresenta quanto sobra depois dos gastos, receitas, despesas e orçamento ainda disponível no mês selecionado.
-- Mostra a distribuição percentual dos gastos por categoria e o fluxo de caixa de receitas e despesas nos últimos seis meses ou em todo o período registrado.
+- Mostra a distribuição percentual dos gastos por categoria e o fluxo de caixa de receitas e despesas no mês de referência, nos últimos 3 ou 6 meses, ou em todo o período registrado.
 - Permite definir limites mensais por categoria e comparar o limite com o gasto realizado, com alertas em linguagem simples quando está perto ou foi ultrapassado.
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
-- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico em seis meses ou em todo o período. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
+- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
 - Permite criar perfis locais independentes e alternar entre eles; lançamentos, orçamentos, categorias, metas e investimentos ficam separados por perfil.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
@@ -40,7 +40,7 @@ Para preservar os dados criados por cópias anteriores do executável público, 
 
 O botão **Verificar atualização** consulta a última Release estável de `miguelsampaiomartins/orca-bem`. Se houver uma versão mais nova, o app pede confirmação, mostra as notas e baixa o asset `OrcaBem.exe` para `Downloads`, conferindo o SHA-256 informado pelo GitHub antes de salvar. O download não instala nem substitui o executável aberto: feche o app e execute o arquivo baixado para concluir a atualização.
 
-Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.2`, anexando o arquivo exatamente como `OrcaBem.exe`. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
+Para publicar uma versão futura, atualize `APP_VERSION` em `OrcaBemApp.java`, compile o executável correspondente e publique uma Release estável com uma tag semântica, por exemplo `v1.0.3`, anexando o arquivo exatamente como `OrcaBem.exe`. Releases em rascunho ou pré-lançamento não são consideradas pelo verificador.
 
 ## Ícone
 
