@@ -69,10 +69,10 @@ public final class OrcaBemApp extends JFrame {
     private static Color SIDEBAR = new Color(8, 22, 20);
     private static final Preferences THEME_PREFERENCES = Preferences.userNodeForPackage(OrcaBemApp.class);
     private static AppTheme selectedTheme = AppTheme.fromKey(THEME_PREFERENCES.get("theme", "VERDE"));
-    static { applyPalette(selectedTheme.palette); }
+    static { applyPalette(paletteFor(selectedTheme)); }
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.9";
+    private static final String APP_VERSION = "1.0.10";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -113,7 +113,8 @@ public final class OrcaBemApp extends JFrame {
         AZUL("Azul", new Palette(new Color(239, 244, 250), new Color(158, 177, 198), new Color(100, 218, 169),
                 new Color(119, 183, 247), new Color(17, 39, 61), new Color(42, 68, 98), new Color(147, 200, 255),
                 new Color(13, 24, 39), new Color(20, 36, 57), new Color(29, 49, 74), new Color(48, 75, 105),
-                new Color(42, 68, 98), new Color(255, 140, 126), new Color(184, 170, 242), new Color(9, 17, 29)));
+                new Color(42, 68, 98), new Color(255, 140, 126), new Color(184, 170, 242), new Color(9, 17, 29))),
+        PERSONALIZADA("Personalizada", null);
 
         final String label;
         final Palette palette;
@@ -134,6 +135,37 @@ public final class OrcaBemApp extends JFrame {
         ACCENT_TEXT = palette.accentText(); GREEN_LIGHT = palette.greenLight(); ACCENT_HOVER = palette.accentHover();
         CANVAS = palette.canvas(); CARD = palette.card(); CARD_ALT = palette.cardAlt(); BORDER = palette.border();
         RED = palette.red(); PURPLE = palette.purple(); SIDEBAR = palette.sidebar();
+    }
+
+    private static Palette paletteFor(AppTheme theme) {
+        if (theme != AppTheme.PERSONALIZADA) return theme.palette;
+        Color custom = new Color(THEME_PREFERENCES.getInt("customAccentRgb", AppTheme.VERDE.palette.accent().getRGB()), true);
+        return paletteWithAccent(AppTheme.VERDE.palette, custom);
+    }
+
+    private static Palette paletteWithAccent(Palette base, Color accent) {
+        double luminance = relativeLuminance(accent);
+        Color text = luminance > 0.18 ? new Color(19, 38, 31) : Color.WHITE;
+        Color hover = blend(accent, luminance < 0.5 ? Color.WHITE : Color.BLACK, 0.16);
+        Color selection = blend(base.canvas(), accent, luminance > 0.72 ? 0.18 : 0.34);
+        return new Palette(base.ink(), base.muted(), base.green(), accent, text, selection, hover,
+                base.canvas(), base.card(), base.cardAlt(), base.border(), selection, base.red(), base.purple(), base.sidebar());
+    }
+
+    private static Color blend(Color first, Color second, double secondWeight) {
+        double firstWeight = 1.0 - secondWeight;
+        return new Color((int)Math.round(first.getRed() * firstWeight + second.getRed() * secondWeight),
+                (int)Math.round(first.getGreen() * firstWeight + second.getGreen() * secondWeight),
+                (int)Math.round(first.getBlue() * firstWeight + second.getBlue() * secondWeight));
+    }
+
+    private static double relativeLuminance(Color color) {
+        return 0.2126 * linearChannel(color.getRed()) + 0.7152 * linearChannel(color.getGreen()) + 0.0722 * linearChannel(color.getBlue());
+    }
+
+    private static double linearChannel(int component) {
+        double value = component / 255.0;
+        return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
     }
 
     private ChartRange cashFlowRange = ChartRange.SIX_MONTHS;
@@ -629,7 +661,7 @@ public final class OrcaBemApp extends JFrame {
         navButtons.forEach((key, button) -> {
             boolean active = currentPage.equals(key);
             button.setBackground(active ? GREEN_LIGHT : SIDEBAR);
-            button.setForeground(active ? ACCENT : MUTED);
+            button.setForeground(active ? INK : MUTED);
         });
     }
 
@@ -1046,29 +1078,56 @@ public final class OrcaBemApp extends JFrame {
         privacyCard.add(badge); privacyCard.add(Box.createVerticalStrut(13)); privacyCard.add(heading); privacyCard.add(Box.createVerticalStrut(7)); privacyCard.add(explanation); privacyCard.add(Box.createVerticalStrut(17)); privacyCard.add(location); privacyCard.add(Box.createVerticalStrut(17)); privacyCard.add(actions);
         content.add(privacyCard);
 
-        JPanel themeCard = cardPanel(); themeCard.setLayout(new BorderLayout(14, 0));
+        JPanel themeCard = cardPanel(); themeCard.setLayout(new BoxLayout(themeCard, BoxLayout.Y_AXIS));
         themeCard.setBorder(BorderFactory.createCompoundBorder(themeCard.getBorder(), BorderFactory.createEmptyBorder(18, 22, 18, 22)));
         JPanel themeCopy = new JPanel(); themeCopy.setOpaque(false); themeCopy.setLayout(new BoxLayout(themeCopy, BoxLayout.Y_AXIS));
         JLabel themeTitle = new JLabel("Cor do tema"); themeTitle.setFont(new Font("Segoe UI", Font.BOLD, 15)); themeTitle.setForeground(INK);
-        JLabel themeDescription = new JLabel("Escolha a aparência do OrçaBem. A preferência é salva neste computador."); themeDescription.setFont(new Font("Segoe UI", Font.PLAIN, 11)); themeDescription.setForeground(MUTED);
+        JLabel themeDescription = new JLabel("<html><div style='width:440px'>Escolha uma paleta pronta ou abra o quadro para selecionar qualquer cor. A preferência fica salva neste computador.</div></html>"); themeDescription.setFont(new Font("Segoe UI", Font.PLAIN, 11)); themeDescription.setForeground(MUTED);
         themeCopy.add(themeTitle); themeCopy.add(Box.createVerticalStrut(5)); themeCopy.add(themeDescription);
         javax.swing.JComboBox<AppTheme> themeChooser = new ThemeComboBox<>(AppTheme.values());
-        themeChooser.setSelectedItem(selectedTheme); themeChooser.setPreferredSize(new Dimension(210, 38)); styleInput(themeChooser);
+        themeChooser.setSelectedItem(selectedTheme); themeChooser.setPreferredSize(new Dimension(180, 38)); styleInput(themeChooser);
         themeChooser.addActionListener(e -> {
             Object value = themeChooser.getSelectedItem();
-            if (value instanceof AppTheme theme) changeTheme(theme);
+            if (!(value instanceof AppTheme theme)) return;
+            if (theme == AppTheme.PERSONALIZADA) {
+                Color chosen = chooseCustomThemeColor();
+                if (chosen == null) { themeChooser.setSelectedItem(selectedTheme); return; }
+                changeTheme(theme, chosen);
+            } else changeTheme(theme, null);
         });
-        themeCard.add(themeCopy, BorderLayout.CENTER); themeCard.add(themeChooser, BorderLayout.EAST);
-        themeCard.setAlignmentX(Component.LEFT_ALIGNMENT); themeCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+        JButton chooseColor = secondaryButton("Escolher cor…");
+        chooseColor.addActionListener(e -> {
+            Color chosen = chooseCustomThemeColor();
+            if (chosen != null) changeTheme(AppTheme.PERSONALIZADA, chosen);
+        });
+        JPanel colorSwatch = new JPanel(); colorSwatch.setPreferredSize(new Dimension(30, 30)); colorSwatch.setBackground(ACCENT);
+        colorSwatch.setBorder(BorderFactory.createLineBorder(BORDER, 1, true)); colorSwatch.setToolTipText("Amostra da cor principal atual");
+        JPanel themeControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); themeControls.setOpaque(false);
+        themeControls.setAlignmentX(Component.LEFT_ALIGNMENT);
+        themeControls.add(themeChooser); themeControls.add(chooseColor); themeControls.add(colorSwatch);
+        themeCard.add(themeCopy); themeCard.add(Box.createVerticalStrut(12)); themeCard.add(themeControls);
+        themeCard.setAlignmentX(Component.LEFT_ALIGNMENT); themeCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 140));
         content.add(Box.createVerticalStrut(12)); content.add(themeCard);
         JScrollPane scroll = new JScrollPane(content); scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
         page.add(scroll, BorderLayout.CENTER); return page;
     }
 
-    private void changeTheme(AppTheme theme) {
-        if (theme == null || theme == selectedTheme) return;
+    private Color chooseCustomThemeColor() {
+        Color initial = selectedTheme == AppTheme.PERSONALIZADA ? ACCENT : paletteFor(selectedTheme).accent();
+        return javax.swing.JColorChooser.showDialog(this, "Escolha a cor principal do OrçaBem", initial);
+    }
+
+    private void changeTheme(AppTheme theme) { changeTheme(theme, null); }
+
+    private void changeTheme(AppTheme theme, Color customColor) {
+        if (theme == null || (theme == selectedTheme && customColor == null)) return;
+        if (theme == AppTheme.PERSONALIZADA && customColor == null) return;
+        if (customColor != null) {
+            customColor = new Color(customColor.getRed(), customColor.getGreen(), customColor.getBlue());
+            THEME_PREFERENCES.putInt("customAccentRgb", customColor.getRGB());
+        }
         selectedTheme = theme;
-        applyPalette(theme.palette);
+        applyPalette(paletteFor(theme));
         THEME_PREFERENCES.put("theme", theme.name());
         try { THEME_PREFERENCES.flush(); }
         catch (BackingStoreException ex) {
@@ -1472,7 +1531,7 @@ public final class OrcaBemApp extends JFrame {
                 @Override public Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean selected, boolean focused) {
                     JLabel cell = (JLabel) super.getListCellRendererComponent(list, value, index, selected, focused);
                     cell.setOpaque(true); cell.setFont(new Font("Segoe UI", Font.PLAIN, 12)); cell.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
-                    cell.setBackground(selected ? GREEN_LIGHT : CARD_ALT); cell.setForeground(selected ? ACCENT : INK);
+                    cell.setBackground(selected ? GREEN_LIGHT : CARD_ALT); cell.setForeground(INK);
                     return cell;
                 }
             });
