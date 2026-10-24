@@ -21,13 +21,22 @@ public final class TrendChart extends JPanel {
     private List<YearMonth> months = List.of();
     private Function<YearMonth, BigDecimal> primaryAmounts = m -> BigDecimal.ZERO;
     private Function<YearMonth, BigDecimal> secondaryAmounts;
-    private final Color incomeColor = new Color(100, 218, 169);
-    private final Color expenseColor = new Color(244, 173, 111);
-    private final Color muted = new Color(161, 181, 171);
-    private final Color grid = new Color(48, 78, 67);
-    private final Color card = new Color(20, 42, 38);
+    private Color incomeColor = new Color(100, 218, 169);
+    private Color expenseColor = new Color(244, 173, 111);
+    private Color muted = new Color(161, 181, 171);
+    private Color grid = new Color(48, 78, 67);
+    private Color card = new Color(20, 42, 38);
 
     public TrendChart() { setOpaque(false); setPreferredSize(new Dimension(430, 230)); }
+
+    public void setThemeColors(Color primary, Color secondary, Color muted, Color grid, Color card) {
+        if (primary != null) this.incomeColor = primary;
+        if (secondary != null) this.expenseColor = secondary;
+        if (muted != null) this.muted = muted;
+        if (grid != null) this.grid = grid;
+        if (card != null) this.card = card;
+        repaint();
+    }
 
     public void setData(List<YearMonth> months, Function<YearMonth, BigDecimal> amounts) {
         this.months = List.copyOf(months);

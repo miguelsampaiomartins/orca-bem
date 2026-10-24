@@ -48,24 +48,31 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.prefs.BackingStoreException;
+import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public final class OrcaBemApp extends JFrame {
-    private static final Color INK = new Color(242, 246, 241);
-    private static final Color MUTED = new Color(161, 181, 171);
-    private static final Color GREEN = new Color(100, 218, 169);
-    private static final Color ACCENT = new Color(244, 185, 99);
-    private static final Color GREEN_LIGHT = new Color(37, 72, 59);
-    private static final Color CANVAS = new Color(12, 28, 26);
-    private static final Color CARD = new Color(20, 42, 38);
-    private static final Color CARD_ALT = new Color(28, 55, 49);
-    private static final Color BORDER = new Color(48, 78, 67);
-    private static final Color RED = new Color(255, 140, 126);
-    private static final Color PURPLE = new Color(185, 163, 232);
-    private static final Color SIDEBAR = new Color(8, 22, 20);
+    private static Color INK = new Color(242, 246, 241);
+    private static Color MUTED = new Color(161, 181, 171);
+    private static Color GREEN = new Color(100, 218, 169);
+    private static Color ACCENT = new Color(100, 218, 169);
+    private static Color ACCENT_TEXT = new Color(19, 38, 31);
+    private static Color GREEN_LIGHT = new Color(37, 72, 59);
+    private static Color ACCENT_HOVER = new Color(125, 230, 186);
+    private static Color CANVAS = new Color(12, 28, 26);
+    private static Color CARD = new Color(20, 42, 38);
+    private static Color CARD_ALT = new Color(28, 55, 49);
+    private static Color BORDER = new Color(48, 78, 67);
+    private static Color RED = new Color(255, 140, 126);
+    private static Color PURPLE = new Color(185, 163, 232);
+    private static Color SIDEBAR = new Color(8, 22, 20);
+    private static final Preferences THEME_PREFERENCES = Preferences.userNodeForPackage(OrcaBemApp.class);
+    private static AppTheme selectedTheme = AppTheme.fromKey(THEME_PREFERENCES.get("theme", "VERDE"));
+    static { applyPalette(selectedTheme.palette); }
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.7";
+    private static final String APP_VERSION = "1.0.8";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -85,6 +92,50 @@ public final class OrcaBemApp extends JFrame {
         final int monthCount;
         ChartRange(String label, int monthCount) { this.label = label; this.monthCount = monthCount; }
     }
+
+    private enum AppTheme {
+        BRANCO("Branco", new Palette(new Color(35, 51, 43), new Color(91, 108, 98), new Color(45, 139, 87),
+                new Color(31, 122, 74), Color.WHITE, new Color(213, 238, 222), new Color(45, 151, 89),
+                new Color(244, 248, 245), Color.WHITE, new Color(232, 240, 235), new Color(204, 218, 209),
+                new Color(213, 238, 222), new Color(196, 67, 79), new Color(117, 83, 158), new Color(233, 240, 235))),
+        VERDE("Verde (padrão)", new Palette(new Color(242, 246, 241), new Color(161, 181, 171), new Color(100, 218, 169),
+                new Color(100, 218, 169), new Color(19, 38, 31), new Color(37, 72, 59), new Color(125, 230, 186),
+                new Color(12, 28, 26), new Color(20, 42, 38), new Color(28, 55, 49), new Color(48, 78, 67),
+                new Color(37, 72, 59), new Color(255, 140, 126), new Color(185, 163, 232), new Color(8, 22, 20))),
+        VERMELHO("Vermelho", new Palette(new Color(246, 239, 239), new Color(184, 159, 162), new Color(100, 218, 169),
+                new Color(255, 125, 125), new Color(51, 22, 27), new Color(83, 43, 51), new Color(255, 157, 153),
+                new Color(29, 17, 20), new Color(43, 25, 30), new Color(57, 34, 41), new Color(91, 54, 63),
+                new Color(83, 43, 51), new Color(255, 140, 126), new Color(205, 161, 224), new Color(20, 12, 15))),
+        ROSA("Rosa", new Palette(new Color(247, 239, 246), new Color(185, 162, 182), new Color(100, 218, 169),
+                new Color(244, 139, 194), new Color(54, 26, 45), new Color(79, 43, 68), new Color(249, 165, 211),
+                new Color(28, 17, 27), new Color(42, 25, 40), new Color(56, 34, 54), new Color(87, 53, 83),
+                new Color(79, 43, 68), new Color(255, 140, 150), new Color(207, 166, 238), new Color(19, 12, 19))),
+        AZUL("Azul", new Palette(new Color(239, 244, 250), new Color(158, 177, 198), new Color(100, 218, 169),
+                new Color(119, 183, 247), new Color(17, 39, 61), new Color(42, 68, 98), new Color(147, 200, 255),
+                new Color(13, 24, 39), new Color(20, 36, 57), new Color(29, 49, 74), new Color(48, 75, 105),
+                new Color(42, 68, 98), new Color(255, 140, 126), new Color(184, 170, 242), new Color(9, 17, 29)));
+
+        final String label;
+        final Palette palette;
+        AppTheme(String label, Palette palette) { this.label = label; this.palette = palette; }
+        static AppTheme fromKey(String key) {
+            try { return valueOf(key); }
+            catch (IllegalArgumentException | NullPointerException ignored) { return VERDE; }
+        }
+        @Override public String toString() { return label; }
+    }
+
+    private record Palette(Color ink, Color muted, Color green, Color accent, Color accentText, Color selection,
+                           Color accentHover, Color canvas, Color card, Color cardAlt, Color border, Color greenLight,
+                           Color red, Color purple, Color sidebar) { }
+
+    private static void applyPalette(Palette palette) {
+        INK = palette.ink(); MUTED = palette.muted(); GREEN = palette.green(); ACCENT = palette.accent();
+        ACCENT_TEXT = palette.accentText(); GREEN_LIGHT = palette.greenLight(); ACCENT_HOVER = palette.accentHover();
+        CANVAS = palette.canvas(); CARD = palette.card(); CARD_ALT = palette.cardAlt(); BORDER = palette.border();
+        RED = palette.red(); PURPLE = palette.purple(); SIDEBAR = palette.sidebar();
+    }
+
     private ChartRange cashFlowRange = ChartRange.SIX_MONTHS;
     private ChartRange investmentRange = ChartRange.ALL_TIME;
     private YearMonth selectedMonth = YearMonth.now();
@@ -277,7 +328,7 @@ public final class OrcaBemApp extends JFrame {
     }
 
     private void addNav(String key, String accessibleName) {
-        JButton button = new ThemeButton(accessibleName, SIDEBAR, new Color(31, 57, 47), SIDEBAR);
+        JButton button = new ThemeButton(accessibleName, SIDEBAR, GREEN_LIGHT, SIDEBAR);
         button.setIcon(new SidebarIcon(key)); button.setIconTextGap(12);
         button.setHorizontalAlignment(SwingConstants.LEFT); button.setFocusPainted(false); button.setBorderPainted(false); button.setOpaque(false);
         button.setFont(new Font("Segoe UI", Font.BOLD, 12)); button.setPreferredSize(new Dimension(198, 44)); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
@@ -526,8 +577,8 @@ public final class OrcaBemApp extends JFrame {
     private void updateNavStyles() {
         navButtons.forEach((key, button) -> {
             boolean active = currentPage.equals(key);
-            button.setBackground(active ? new Color(32, 58, 47) : SIDEBAR);
-            button.setForeground(active ? ACCENT : new Color(163, 181, 171));
+            button.setBackground(active ? GREEN_LIGHT : SIDEBAR);
+            button.setForeground(active ? ACCENT : MUTED);
         });
     }
 
@@ -645,7 +696,7 @@ public final class OrcaBemApp extends JFrame {
         JLabel value = new JLabel(percent(amount, totalSpent) + "  ·  " + money(amount)); value.setFont(new Font("Segoe UI", Font.BOLD, 10)); value.setForeground(MUTED);
         JPanel top = new JPanel(new BorderLayout()); top.setOpaque(false); top.add(name, BorderLayout.WEST); top.add(value, BorderLayout.EAST);
         JPanel track = new JPanel(new BorderLayout()); track.setBackground(CARD_ALT); track.setPreferredSize(new Dimension(100, 6));
-        JPanel fill = new JPanel(); fill.setBackground(GREEN); int width = Math.max(4, (int)(290 * amount.doubleValue() / Math.max(1, totalSpent.doubleValue()))); fill.setPreferredSize(new Dimension(width, 6)); track.add(fill, BorderLayout.WEST);
+        JPanel fill = new JPanel(); fill.setBackground(ACCENT); int width = Math.max(4, (int)(290 * amount.doubleValue() / Math.max(1, totalSpent.doubleValue()))); fill.setPreferredSize(new Dimension(width, 6)); track.add(fill, BorderLayout.WEST);
         row.add(top, BorderLayout.NORTH); row.add(track, BorderLayout.SOUTH); return row;
     }
 
@@ -656,12 +707,12 @@ public final class OrcaBemApp extends JFrame {
         JPanel controls = rangeControls(cashFlowRange, range -> { cashFlowRange = range; refreshPage(); });
         controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 9, 3)); legend.setOpaque(false);
-        JLabel incomeLegend = new JLabel("● Receitas disponíveis"); incomeLegend.setForeground(GREEN); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        JLabel incomeLegend = new JLabel("● Receitas disponíveis"); incomeLegend.setForeground(ACCENT); incomeLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         JLabel expenseLegend = new JLabel("● Despesas"); expenseLegend.setForeground(PURPLE); expenseLegend.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         legend.add(incomeLegend); legend.add(expenseLegend); card.add(header, BorderLayout.NORTH);
         card.add(legend, BorderLayout.SOUTH);
         List<YearMonth> months = cashFlowMonths();
-        TrendChart chart = new TrendChart(); chart.setCashFlowData(months, m -> total(m, Transaction.Type.INCOME), m -> total(m, Transaction.Type.EXPENSE));
+        TrendChart chart = new TrendChart(); chart.setThemeColors(ACCENT, PURPLE, MUTED, BORDER, CARD); chart.setCashFlowData(months, m -> total(m, Transaction.Type.INCOME), m -> total(m, Transaction.Type.EXPENSE));
         card.add(chart, BorderLayout.CENTER); return card;
     }
 
@@ -675,7 +726,7 @@ public final class OrcaBemApp extends JFrame {
     }
 
     private JButton rangeButton(String label, boolean selected, Runnable action) {
-        JButton button = styleButton(label, selected ? ACCENT : CARD_ALT, selected ? new Color(30, 35, 28) : INK, selected ? new Color(255, 207, 131) : new Color(39, 72, 59));
+        JButton button = styleButton(label, selected ? ACCENT : CARD_ALT, selected ? ACCENT_TEXT : INK, selected ? ACCENT_HOVER : GREEN_LIGHT);
         button.setFont(new Font("Segoe UI", Font.BOLD, 9)); button.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         button.addActionListener(e -> action.run()); return button;
     }
@@ -849,7 +900,7 @@ public final class OrcaBemApp extends JFrame {
         JPanel controls = rangeControls(investmentRange, range -> { investmentRange = range; refreshPage(); });
         controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         card.add(header, BorderLayout.NORTH);
-        TrendChart chart = new TrendChart();
+        TrendChart chart = new TrendChart(); chart.setThemeColors(ACCENT, PURPLE, MUTED, BORDER, CARD);
         chart.setData(investmentMonths(), month -> investmentStore.balanceAt(month.atEndOfMonth()));
         card.add(chart, BorderLayout.CENTER);
         JLabel note = new JLabel("A visualização mostra o saldo calculado pelos aportes e resgates registrados; rentabilidade e preços de mercado não são estimados.");
@@ -943,8 +994,39 @@ public final class OrcaBemApp extends JFrame {
         actions.add(export); actions.add(importButton); actions.add(open);
         privacyCard.add(badge); privacyCard.add(Box.createVerticalStrut(13)); privacyCard.add(heading); privacyCard.add(Box.createVerticalStrut(7)); privacyCard.add(explanation); privacyCard.add(Box.createVerticalStrut(17)); privacyCard.add(location); privacyCard.add(Box.createVerticalStrut(17)); privacyCard.add(actions);
         content.add(privacyCard);
+
+        JPanel themeCard = cardPanel(); themeCard.setLayout(new BorderLayout(14, 0));
+        themeCard.setBorder(BorderFactory.createCompoundBorder(themeCard.getBorder(), BorderFactory.createEmptyBorder(18, 22, 18, 22)));
+        JPanel themeCopy = new JPanel(); themeCopy.setOpaque(false); themeCopy.setLayout(new BoxLayout(themeCopy, BoxLayout.Y_AXIS));
+        JLabel themeTitle = new JLabel("Cor do tema"); themeTitle.setFont(new Font("Segoe UI", Font.BOLD, 15)); themeTitle.setForeground(INK);
+        JLabel themeDescription = new JLabel("Escolha a aparência do OrçaBem. A preferência é salva neste computador."); themeDescription.setFont(new Font("Segoe UI", Font.PLAIN, 11)); themeDescription.setForeground(MUTED);
+        themeCopy.add(themeTitle); themeCopy.add(Box.createVerticalStrut(5)); themeCopy.add(themeDescription);
+        javax.swing.JComboBox<AppTheme> themeChooser = new ThemeComboBox<>(AppTheme.values());
+        themeChooser.setSelectedItem(selectedTheme); themeChooser.setPreferredSize(new Dimension(210, 38)); styleInput(themeChooser);
+        themeChooser.addActionListener(e -> {
+            Object value = themeChooser.getSelectedItem();
+            if (value instanceof AppTheme theme) changeTheme(theme);
+        });
+        themeCard.add(themeCopy, BorderLayout.CENTER); themeCard.add(themeChooser, BorderLayout.EAST);
+        themeCard.setAlignmentX(Component.LEFT_ALIGNMENT); themeCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+        content.add(Box.createVerticalStrut(12)); content.add(themeCard);
         JScrollPane scroll = new JScrollPane(content); scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
         page.add(scroll, BorderLayout.CENTER); return page;
+    }
+
+    private void changeTheme(AppTheme theme) {
+        if (theme == null || theme == selectedTheme) return;
+        selectedTheme = theme;
+        applyPalette(theme.palette);
+        THEME_PREFERENCES.put("theme", theme.name());
+        try { THEME_PREFERENCES.flush(); }
+        catch (BackingStoreException ex) {
+            JOptionPane.showMessageDialog(this, "O tema foi alterado, mas não foi possível salvar a preferência: " + ex.getMessage(), "Preferência do tema", JOptionPane.WARNING_MESSAGE);
+        }
+        sidebar.removeAll(); navButtons.clear(); pageHost.removeAll(); getContentPane().removeAll();
+        getContentPane().setLayout(new BorderLayout()); getContentPane().setBackground(CANVAS);
+        add(buildSidebar(), BorderLayout.WEST); add(buildMain(), BorderLayout.CENTER);
+        refreshPage(); getContentPane().revalidate(); getContentPane().repaint();
     }
 
     private void openDataFolder() {
@@ -1315,9 +1397,9 @@ public final class OrcaBemApp extends JFrame {
         JLabel label = new JLabel(text, SwingConstants.CENTER); label.setForeground(MUTED); label.setFont(new Font("Segoe UI", Font.PLAIN, 11)); label.setBorder(BorderFactory.createEmptyBorder(12, 8, 12, 8)); return label;
     }
 
-    private JButton primaryButton(String text) { return styleButton(text, ACCENT, new Color(30, 35, 28), new Color(255, 207, 131)); }
-    private JButton secondaryButton(String text) { return styleButton(text, CARD_ALT, INK, new Color(39, 72, 59)); }
-    private JButton smallButton(String text) { JButton b = styleButton(text, CARD_ALT, INK, new Color(39, 72, 59)); b.setPreferredSize(new Dimension(37, 37)); b.setFont(new Font("Segoe UI", Font.BOLD, 18)); return b; }
+    private JButton primaryButton(String text) { return styleButton(text, ACCENT, ACCENT_TEXT, ACCENT_HOVER); }
+    private JButton secondaryButton(String text) { return styleButton(text, CARD_ALT, INK, GREEN_LIGHT); }
+    private JButton smallButton(String text) { JButton b = styleButton(text, CARD_ALT, INK, GREEN_LIGHT); b.setPreferredSize(new Dimension(37, 37)); b.setFont(new Font("Segoe UI", Font.BOLD, 18)); return b; }
     private JButton styleButton(String text, Color bg, Color fg, Color hover) {
         JButton b = new ThemeButton(text, bg, hover, BORDER); b.setFont(new Font("Segoe UI", Font.BOLD, 11)); b.setForeground(fg); b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         b.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12)); b.setMargin(new Insets(0, 0, 0, 0));
@@ -1329,7 +1411,7 @@ public final class OrcaBemApp extends JFrame {
         if (input instanceof javax.swing.JComboBox<?> combo) {
             combo.setUI(new javax.swing.plaf.basic.BasicComboBoxUI() {
                 @Override protected JButton createArrowButton() {
-                    JButton arrow = new ThemeButton("▾", CARD_ALT, new Color(39, 72, 59), BORDER);
+                    JButton arrow = new ThemeButton("▾", CARD_ALT, GREEN_LIGHT, BORDER);
                     arrow.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 12)); arrow.setPreferredSize(new Dimension(34, 28));
                     arrow.setBorder(BorderFactory.createEmptyBorder(1, 3, 1, 3)); return arrow;
                 }
@@ -1339,7 +1421,7 @@ public final class OrcaBemApp extends JFrame {
                 @Override public Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean selected, boolean focused) {
                     JLabel cell = (JLabel) super.getListCellRendererComponent(list, value, index, selected, focused);
                     cell.setOpaque(true); cell.setFont(new Font("Segoe UI", Font.PLAIN, 12)); cell.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
-                    cell.setBackground(selected ? new Color(39, 72, 59) : CARD_ALT); cell.setForeground(selected ? ACCENT : INK);
+                    cell.setBackground(selected ? GREEN_LIGHT : CARD_ALT); cell.setForeground(selected ? ACCENT : INK);
                     return cell;
                 }
             });
@@ -1454,13 +1536,13 @@ public final class OrcaBemApp extends JFrame {
         }
 
         @Override public Color getForeground() {
-            return isEnabled() ? super.getForeground() : new Color(166, 183, 172);
+            return isEnabled() ? super.getForeground() : MUTED;
         }
 
         @Override protected void paintComponent(java.awt.Graphics raw) {
             java.awt.Graphics2D g = (java.awt.Graphics2D) raw.create();
             g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-            Color fill = !isEnabled() ? new Color(25, 43, 38) : getModel().isPressed() ? getBackground().darker() : getModel().isRollover() ? hoverColor : getBackground();
+            Color fill = !isEnabled() ? CARD_ALT.darker() : getModel().isPressed() ? getBackground().darker() : getModel().isRollover() ? hoverColor : getBackground();
             g.setColor(fill); g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
             g.setColor(outlineColor); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
             g.dispose();
