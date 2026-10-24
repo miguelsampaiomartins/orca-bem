@@ -22,7 +22,7 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Permite personalizar as cores do tema entre Branco, Verde (padrão), Vermelho, Rosa e Azul; a escolha é salva no computador para a próxima abertura.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
 - Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
-- Verifica a versão estável mais recente no GitHub Releases e, com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir automaticamente a integridade do arquivo. A partir da v1.0.4, é possível instalar e reiniciar pelo app; versões antigas exigem abrir manualmente a primeira atualização.
+- Verifica automaticamente a versão estável mais recente ao abrir o app e a cada 6 horas enquanto ele permanece aberto; quando existe uma versão nova, avisa o usuário sem iniciar o download até ele confirmar. O botão de verificação manual também permanece disponível. Com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir automaticamente a integridade do arquivo. A partir da v1.0.4, é possível instalar e reiniciar pelo app; versões antigas exigem abrir manualmente a primeira atualização.
 
 ## Requisitos
 

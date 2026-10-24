@@ -72,7 +72,7 @@ public final class OrcaBemApp extends JFrame {
     static { applyPalette(selectedTheme.palette); }
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.8";
+    private static final String APP_VERSION = "1.0.9";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -146,6 +146,9 @@ public final class OrcaBemApp extends JFrame {
     private final JLabel pageTitle = new JLabel();
     private final JPanel sidebar = new JPanel();
     private final Map<String, JButton> navButtons = new LinkedHashMap<>();
+    private javax.swing.Timer updateCheckTimer;
+    private boolean automaticUpdateCheckRunning;
+    private final java.util.Set<String> announcedUpdateVersions = new java.util.HashSet<>();
 
     public OrcaBemApp() throws IOException {
         super("OrçaBem — seu dinheiro em foco");
@@ -418,6 +421,54 @@ public final class OrcaBemApp extends JFrame {
                     JOptionPane.showMessageDialog(OrcaBemApp.this,
                             "Não foi possível consultar as Releases do GitHub.\n" + detail,
                             "Falha na verificação", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    static boolean isNewerVersionAvailable(String releaseTag) {
+        try { return UpdateService.compareVersions(releaseTag, APP_VERSION) > 0; }
+        catch (IllegalArgumentException ex) { return false; }
+    }
+
+    private void startAutomaticUpdateChecks() {
+        if (isUpdateSimulation()) return;
+        checkForUpdatesAutomatically();
+        updateCheckTimer = new javax.swing.Timer(6 * 60 * 60 * 1000, event -> checkForUpdatesAutomatically());
+        updateCheckTimer.setRepeats(true);
+        updateCheckTimer.start();
+    }
+
+    private void checkForUpdatesAutomatically() {
+        if (automaticUpdateCheckRunning || !isDisplayable()) return;
+        automaticUpdateCheckRunning = true;
+        new javax.swing.SwingWorker<java.util.Optional<UpdateService.Release>, Void>() {
+            @Override protected java.util.Optional<UpdateService.Release> doInBackground() throws Exception {
+                return UpdateService.fetchLatest();
+            }
+
+            @Override protected void done() {
+                automaticUpdateCheckRunning = false;
+                if (!isDisplayable()) return;
+                try {
+                    java.util.Optional<UpdateService.Release> result = get();
+                    if (result.isEmpty()) return;
+                    UpdateService.Release release = result.get();
+                    if (!isNewerVersionAvailable(release.tag()) || !announcedUpdateVersions.add(release.tag())) return;
+                    if (!release.hasVerifiedWindowsAsset()) {
+                        String issue = release.assetUri() == null || release.assetName() == null
+                                ? "A Release não contém o arquivo OrcaBem.exe."
+                                : "Não foi possível validar a integridade do OrcaBem.exe; o download foi bloqueado por segurança.";
+                        JOptionPane.showMessageDialog(OrcaBemApp.this,
+                                "Uma nova versão (" + release.tag() + ") está disponível, mas ainda não pode ser instalada.\n" + issue,
+                                "Atualização disponível", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    showDownloadConfirmationDialog(release);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException | IllegalArgumentException ignored) {
+                    // Falhas de rede ou tags inválidas não bloqueiam o app; a verificação manual segue disponível.
                 }
             }
         }.execute();
@@ -1553,7 +1604,11 @@ public final class OrcaBemApp extends JFrame {
     public static void main(String[] args) {
         try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) { }
         SwingUtilities.invokeLater(() -> {
-            try { new OrcaBemApp().setVisible(true); }
+            try {
+                OrcaBemApp app = new OrcaBemApp();
+                app.setVisible(true);
+                SwingUtilities.invokeLater(app::startAutomaticUpdateChecks);
+            }
             catch (IOException ex) { JOptionPane.showMessageDialog(null, "Não foi possível carregar os dados locais: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE); }
         });
     }
