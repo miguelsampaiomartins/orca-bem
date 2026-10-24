@@ -6,12 +6,12 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 
 - Registra receitas e despesas com data, categoria, descrição opcional e valor.
 - Permite editar ou excluir um lançamento selecionado e pesquisar por descrição ou categoria.
-- Apresenta quanto sobra depois dos gastos, receitas, despesas e orçamento ainda disponível no mês selecionado.
-- Mostra a distribuição percentual dos gastos por categoria e o fluxo de caixa de receitas e despesas no mês de referência, nos últimos 3 ou 6 meses, ou em todo o período registrado.
+- Apresenta quanto sobra depois dos gastos, receitas, despesas e o orçamento restante apenas nas categorias com limite definido; gastos sem limite não geram orçamento negativo.
+- Mostra, na visão geral, o gasto e o limite de cada categoria, além do fluxo de caixa de receitas e despesas no mês de referência, nos últimos 3 ou 6 meses, ou em todo o período registrado.
 - Permite definir limites mensais por categoria e comparar o limite com o gasto realizado, com alertas em linguagem simples quando está perto ou foi ultrapassado.
 - Permite adicionar e remover categorias de receitas e despesas. Lançamentos antigos e orçamentos salvos são preservados quando uma categoria sai da lista.
 - Inclui uma meta de economia por mês com uma barra de progresso baseada no saldo líquido do período.
-- Mantém uma área de investimentos com aportes, resgates, saldo acumulado, histórico e gráfico com os períodos Atual, 3 meses, 6 meses e Todo. Cada aporte pode usar receita registrada (reduz as receitas disponíveis daquele mês) ou ser externo (não entra como receita). O saldo é calculado pelos movimentos informados; o app não consulta preços de mercado nem estima rentabilidade.
+- Mantém vários investimentos nomeados, cada um com saldo e meta de valor opcional. Permite registrar, editar ou remover aportes e resgates, escolher o investimento associado, acompanhar saldos individuais ou agregados no gráfico (Atual, 3 meses, 6 meses e Todo) e comparar o saldo à meta. Cada aporte pode usar receita registrada (reduz as receitas disponíveis daquele mês) ou ser externo (não entra como receita). Históricos antigos são migrados para “Investimento legado”, sem perder movimentos. O app não consulta preços de mercado nem estima rentabilidade.
 - Permite criar, alternar e excluir perfis locais independentes pelos botões **Criar perfil** e **Gerenciar perfis** abaixo do seletor. A janela de gerenciamento abre ampliada; a exclusão pede confirmação e remove os dados do perfil inativo. O perfil ativo e o perfil Pessoal (que conserva os dados legados) são protegidos.
 - Compara os gastos com o período equivalente do mês anterior e exibe observações na área de Insights.
 - Importa e exporta lançamentos em CSV.
@@ -19,9 +19,9 @@ Aplicativo desktop de orçamento pessoal, feito em Java 17 e Swing. O OrçaBem r
 - Organiza o conteúdo em Visão geral, Movimentações, Orçamentos, Investimentos, Categorias, Insights e Dados e privacidade.
 - Usa ícones vetoriais desenhados em Java2D para essas áreas, sem depender de glifos especiais instalados no Windows.
 - Permite abrir a pasta local dos dados e importar/exportar CSV na área de privacidade.
-- Permite personalizar as cores do tema entre Branco, Verde (padrão), Vermelho, Rosa e Azul ou escolher uma cor livre pelo quadro de cores; a preferência, incluindo a cor personalizada, é salva no computador para a próxima abertura.
+- Permite personalizar as cores do tema entre Branco, Verde (padrão), Vermelho, Rosa e Azul ou escolher uma cor livre pelo quadro de cores. A cor personalizada também tinge fundos, cartões, campos, bordas e gráficos; a preferência é salva para a próxima abertura.
 - Filtra lançamentos por receita ou despesa e mantém o atalho de novo lançamento sempre visível.
-- Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos.
+- Sugere categorias personalizadas conforme o tipo do lançamento e atualiza planejado, gasto e restante enquanto você edita os orçamentos, sem incluir no restante gastos de categorias sem limite.
 - Verifica automaticamente a versão estável mais recente ao abrir o app e a cada 6 horas enquanto ele permanece aberto; quando existe uma versão nova, avisa o usuário sem iniciar o download até ele confirmar. O botão de verificação manual também permanece disponível. Com confirmação, baixa `OrcaBem.exe` para a pasta de downloads após conferir automaticamente a integridade do arquivo. A partir da v1.0.4, é possível instalar e reiniciar pelo app; versões antigas exigem abrir manualmente a primeira atualização.
 
 ## Requisitos

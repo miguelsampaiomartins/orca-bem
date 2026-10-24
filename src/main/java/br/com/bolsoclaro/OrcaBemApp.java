@@ -5,6 +5,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -67,12 +68,12 @@ public final class OrcaBemApp extends JFrame {
     private static Color RED = new Color(255, 140, 126);
     private static Color PURPLE = new Color(185, 163, 232);
     private static Color SIDEBAR = new Color(8, 22, 20);
-    private static final Preferences THEME_PREFERENCES = Preferences.userNodeForPackage(OrcaBemApp.class);
+    private static final Preferences THEME_PREFERENCES = themePreferences();
     private static AppTheme selectedTheme = AppTheme.fromKey(THEME_PREFERENCES.get("theme", "VERDE"));
     static { applyPalette(paletteFor(selectedTheme)); }
     private static final Locale PT = Locale.forLanguageTag("pt-BR");
     // Incrementar antes de gerar o executável de cada versão publicada.
-    private static final String APP_VERSION = "1.0.10";
+    private static final String APP_VERSION = "1.0.11";
     private static final DateTimeFormatter DATE_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final Path dataDir = Path.of(System.getProperty("orcabem.data.dir", Path.of(System.getProperty("user.home"), ".bolso-claro").toString()));
     private Path activeDataDir;
@@ -86,6 +87,10 @@ public final class OrcaBemApp extends JFrame {
     private InvestmentStore investmentStore;
     private javax.swing.JComboBox<ProfileStore.Profile> profileChooser;
     private boolean suppressProfileSelection;
+    private String selectedInvestmentId;
+    private record InvestmentChoice(String id, String label) {
+        @Override public String toString() { return label; }
+    }
     enum ChartRange {
         CURRENT("Atual", 1), THREE_MONTHS("3 meses", 3), SIX_MONTHS("6 meses", 6), ALL_TIME("Todo", 0);
         final String label;
@@ -137,6 +142,13 @@ public final class OrcaBemApp extends JFrame {
         RED = palette.red(); PURPLE = palette.purple(); SIDEBAR = palette.sidebar();
     }
 
+    private static Preferences themePreferences() {
+        String isolatedNode = System.getProperty("orcabem.theme.preferences.node");
+        return isolatedNode == null || isolatedNode.isBlank()
+                ? Preferences.userNodeForPackage(OrcaBemApp.class)
+                : Preferences.userRoot().node(isolatedNode);
+    }
+
     private static Palette paletteFor(AppTheme theme) {
         if (theme != AppTheme.PERSONALIZADA) return theme.palette;
         Color custom = new Color(THEME_PREFERENCES.getInt("customAccentRgb", AppTheme.VERDE.palette.accent().getRGB()), true);
@@ -147,9 +159,23 @@ public final class OrcaBemApp extends JFrame {
         double luminance = relativeLuminance(accent);
         Color text = luminance > 0.18 ? new Color(19, 38, 31) : Color.WHITE;
         Color hover = blend(accent, luminance < 0.5 ? Color.WHITE : Color.BLACK, 0.16);
-        Color selection = blend(base.canvas(), accent, luminance > 0.72 ? 0.18 : 0.34);
-        return new Palette(base.ink(), base.muted(), base.green(), accent, text, selection, hover,
-                base.canvas(), base.card(), base.cardAlt(), base.border(), selection, base.red(), base.purple(), base.sidebar());
+        float[] hsb = Color.RGBtoHSB(accent.getRed(), accent.getGreen(), accent.getBlue(), null);
+        float surfaceSaturation = hsb[1] < 0.08f ? 0f : Math.min(0.62f, Math.max(0.34f, hsb[1] * 0.58f));
+        Color canvas = fromHsb(hsb[0], surfaceSaturation, 0.085f);
+        Color card = fromHsb(hsb[0], surfaceSaturation, 0.145f);
+        Color cardAlt = fromHsb(hsb[0], surfaceSaturation, 0.215f);
+        Color border = fromHsb(hsb[0], surfaceSaturation * 0.78f, 0.33f);
+        Color sidebar = fromHsb(hsb[0], surfaceSaturation, 0.065f);
+        Color selection = fromHsb(hsb[0], surfaceSaturation, 0.275f);
+        Color ink = fromHsb(hsb[0], Math.min(0.12f, surfaceSaturation * 0.18f), 0.96f);
+        Color muted = fromHsb(hsb[0], surfaceSaturation * 0.32f, 0.72f);
+        Color secondary = fromHsb((hsb[0] + 0.16f) % 1f, Math.max(0.28f, surfaceSaturation * 0.88f), 0.9f);
+        return new Palette(ink, muted, base.green(), accent, text, selection, hover,
+                canvas, card, cardAlt, border, selection, base.red(), secondary, sidebar);
+    }
+
+    private static Color fromHsb(float hue, float saturation, float brightness) {
+        return new Color(Color.HSBtoRGB(hue, saturation, brightness), true);
     }
 
     private static Color blend(Color first, Color second, double secondWeight) {
@@ -357,7 +383,7 @@ public final class OrcaBemApp extends JFrame {
         addNav("insights", "Insights");
         addNav("privacy", "Dados e privacidade");
         sidebar.add(Box.createVerticalGlue());
-        JLabel privateMark = new JLabel("•", SwingConstants.CENTER); privateMark.setForeground(GREEN); privateMark.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        JLabel privateMark = new JLabel("•", SwingConstants.CENTER); privateMark.setForeground(ACCENT); privateMark.setFont(new Font("Segoe UI", Font.BOLD, 26));
         privateMark.setToolTipText("Privado por design · guardado neste computador"); privateMark.setAlignmentX(Component.CENTER_ALIGNMENT); sidebar.add(privateMark);
         return sidebar;
     }
@@ -531,7 +557,7 @@ public final class OrcaBemApp extends JFrame {
         JLabel badge = new JLabel(isUpdateSimulation() ? "SIMULAÇÃO LOCAL · NÃO É UMA RELEASE REAL" : "NOVA VERSÃO NO GITHUB"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(ACCENT);
         JLabel title = new JLabel("OrçaBem " + release.tag()); title.setFont(new Font("Segoe UI", Font.BOLD, 21)); title.setForeground(INK);
         JLabel comparison = new JLabel("Versão instalada " + APP_VERSION + "  →  versão disponível " + release.tag());
-        comparison.setFont(new Font("Segoe UI", Font.PLAIN, 12)); comparison.setForeground(GREEN);
+        comparison.setFont(new Font("Segoe UI", Font.PLAIN, 12)); comparison.setForeground(ACCENT);
         heading.add(badge); heading.add(Box.createVerticalStrut(6)); heading.add(title); heading.add(Box.createVerticalStrut(5)); heading.add(comparison);
         root.add(heading, BorderLayout.NORTH);
 
@@ -673,13 +699,16 @@ public final class OrcaBemApp extends JFrame {
         BigDecimal balance = income.subtract(expense);
         Map<String, BigDecimal> budgets = budgetStore.forMonth(selectedMonth);
         BigDecimal planned = budgets.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal budgetRemaining = planned.subtract(expense);
-        String budgetNote = planned.signum() == 0 ? "Defina limites por categoria" : percent(expense, planned) + " de " + money(planned) + " planejado";
+        Map<String, BigDecimal> spentByCategory = expensesByCategory(selectedMonth);
+        BigDecimal budgetRemaining = budgetRemaining(budgets, spentByCategory);
+        BigDecimal budgetedExpense = budgetedExpense(budgets, spentByCategory);
+        String budgetNote = budgets.isEmpty() ? "Nenhum limite definido" : money(budgetedExpense) + " de " + money(planned) + " em categorias com limite";
         JPanel stats = new JPanel(new GridLayout(1, 4, 12, 0)); stats.setOpaque(false); stats.setPreferredSize(new Dimension(1000, 132)); stats.setMaximumSize(new Dimension(Integer.MAX_VALUE, 132));
         stats.add(statCard("SOBROU DEPOIS DOS GASTOS", money(balance), monthName(selectedMonth) + " · receitas menos despesas", balance.signum() >= 0 ? GREEN : RED));
         stats.add(statCard("RECEITAS DISPONÍVEIS", money(income), "Entradas menos aportes financiados por receita", GREEN));
         stats.add(statCard("DESPESAS", money(expense), expensesByCategory(selectedMonth).size() + " categorias", RED));
-        stats.add(statCard("ORÇAMENTO RESTANTE", money(budgetRemaining), budgetNote, budgetRemaining.signum() >= 0 ? PURPLE : RED));
+        stats.add(statCard("ORÇAMENTO RESTANTE", budgets.isEmpty() ? "—" : money(budgetRemaining), budgetNote,
+                budgets.isEmpty() || budgetRemaining.signum() >= 0 ? PURPLE : RED));
         content.add(stats); content.add(Box.createVerticalStrut(14));
         JPanel charts = new JPanel(new GridLayout(1, 2, 12, 0)); charts.setOpaque(false); charts.setPreferredSize(new Dimension(800, 315)); charts.setMaximumSize(new Dimension(Integer.MAX_VALUE, 315));
         charts.add(categoryCard()); charts.add(trendCard());
@@ -764,22 +793,32 @@ public final class OrcaBemApp extends JFrame {
     private JPanel categoryCard() {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 10)); card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(17, 18, 14, 18)));
         Map<String, BigDecimal> byCategory = expensesByCategory(selectedMonth);
+        Map<String, BigDecimal> budgets = budgetStore.forMonth(selectedMonth);
         BigDecimal totalSpent = total(selectedMonth, Transaction.Type.EXPENSE);
-        card.add(sectionHeading("Distribuição dos gastos", "Por categoria neste mês · " + money(totalSpent)), BorderLayout.NORTH);
+        card.add(sectionHeading("Gastos e limites por categoria", "Gasto neste mês · limite mensal definido"), BorderLayout.NORTH);
+        java.util.Set<String> allCategories = new java.util.LinkedHashSet<>(categoryStore.categories(Transaction.Type.EXPENSE));
+        allCategories.addAll(byCategory.keySet()); allCategories.addAll(budgets.keySet());
+        transactions.stream().filter(t -> t.getType() == Transaction.Type.EXPENSE).map(Transaction::getCategory).forEach(allCategories::add);
         JPanel rows = new JPanel(); rows.setOpaque(false); rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
-        if (byCategory.isEmpty()) rows.add(emptyMessage("Nenhuma despesa neste mês ainda."));
-        else byCategory.entrySet().stream().sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed()).limit(6).forEach(entry -> rows.add(categoryBar(entry.getKey(), entry.getValue(), totalSpent)));
-        card.add(rows, BorderLayout.CENTER);
+        if (allCategories.isEmpty()) rows.add(emptyMessage("Adicione uma categoria de despesa para acompanhar seus limites."));
+        else allCategories.stream().sorted(Comparator.<String, BigDecimal>comparing(category -> byCategory.getOrDefault(category, BigDecimal.ZERO)).reversed().thenComparing(String.CASE_INSENSITIVE_ORDER))
+                .forEach(category -> rows.add(categoryBar(category, byCategory.getOrDefault(category, BigDecimal.ZERO), budgets.get(category), totalSpent)));
+        JScrollPane list = new JScrollPane(rows); list.setBorder(BorderFactory.createEmptyBorder()); list.setOpaque(false); list.getViewport().setOpaque(false);
+        list.getVerticalScrollBar().setUnitIncrement(14); card.add(list, BorderLayout.CENTER);
         return card;
     }
 
-    private JPanel categoryBar(String category, BigDecimal amount, BigDecimal totalSpent) {
+    private JPanel categoryBar(String category, BigDecimal amount, BigDecimal limit, BigDecimal totalSpent) {
         JPanel row = new JPanel(new BorderLayout(8, 3)); row.setOpaque(false); row.setBorder(BorderFactory.createEmptyBorder(1, 0, 5, 0));
         JLabel name = new JLabel(category); name.setFont(new Font("Segoe UI", Font.PLAIN, 11)); name.setForeground(INK);
-        JLabel value = new JLabel(percent(amount, totalSpent) + "  ·  " + money(amount)); value.setFont(new Font("Segoe UI", Font.BOLD, 10)); value.setForeground(MUTED);
+        String limitText = limit == null ? "Sem limite" : "Limite " + money(limit);
+        JLabel value = new JLabel("Gasto " + money(amount) + "  ·  " + limitText); value.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        value.setForeground(limit != null && amount.compareTo(limit) > 0 ? RED : MUTED);
         JPanel top = new JPanel(new BorderLayout()); top.setOpaque(false); top.add(name, BorderLayout.WEST); top.add(value, BorderLayout.EAST);
         JPanel track = new JPanel(new BorderLayout()); track.setBackground(CARD_ALT); track.setPreferredSize(new Dimension(100, 6));
-        JPanel fill = new JPanel(); fill.setBackground(ACCENT); int width = Math.max(4, (int)(290 * amount.doubleValue() / Math.max(1, totalSpent.doubleValue()))); fill.setPreferredSize(new Dimension(width, 6)); track.add(fill, BorderLayout.WEST);
+        JPanel fill = new JPanel(); fill.setBackground(ACCENT); int width = totalSpent.signum() > 0 && amount.signum() > 0
+                ? Math.max(4, (int)(290 * amount.doubleValue() / totalSpent.doubleValue())) : 0;
+        fill.setPreferredSize(new Dimension(width, 6)); track.add(fill, BorderLayout.WEST);
         row.add(top, BorderLayout.NORTH); row.add(track, BorderLayout.SOUTH); return row;
     }
 
@@ -829,7 +868,9 @@ public final class OrcaBemApp extends JFrame {
     }
 
     private List<YearMonth> investmentMonths() {
-        List<YearMonth> recorded = investmentStore.movements().stream().map(m -> YearMonth.from(m.date())).toList();
+        List<YearMonth> recorded = investmentStore.movements().stream()
+                .filter(m -> selectedInvestmentId == null || m.investmentId().equals(selectedInvestmentId))
+                .map(m -> YearMonth.from(m.date())).toList();
         return monthsForRange(investmentRange, YearMonth.now(), recorded);
     }
 
@@ -872,7 +913,7 @@ public final class OrcaBemApp extends JFrame {
         if (insights.isEmpty()) insights.add("Defina um orçamento mensal por categoria para receber análises personalizadas.");
         for (String text : insights.stream().limit(maximumItems).toList()) {
             JPanel line = new JPanel(new BorderLayout(9, 0)); line.setOpaque(false); line.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
-            JLabel bullet = new JLabel("●"); bullet.setForeground(GREEN); bullet.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            JLabel bullet = new JLabel("●"); bullet.setForeground(ACCENT); bullet.setFont(new Font("Segoe UI", Font.BOLD, 10));
             JLabel message = new JLabel(text); message.setForeground(INK); message.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             line.add(bullet, BorderLayout.WEST); line.add(message, BorderLayout.CENTER); list.add(line);
         }
@@ -956,9 +997,10 @@ public final class OrcaBemApp extends JFrame {
         JLabel explanation = new JLabel("Registre aportes e resgates. O saldo considera apenas os valores que você informar, sem cotação de mercado.");
         explanation.setFont(new Font("Segoe UI", Font.PLAIN, 11)); explanation.setForeground(MUTED); explanation.setAlignmentX(Component.LEFT_ALIGNMENT);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
+        JButton create = secondaryButton("+ Novo investimento"); create.addActionListener(e -> investmentDialog(null));
         JButton contribution = primaryButton("+ Registrar aporte"); contribution.addActionListener(e -> investmentMovementDialog(InvestmentStore.Type.APORTE));
         JButton withdrawal = secondaryButton("− Registrar resgate"); withdrawal.addActionListener(e -> investmentMovementDialog(InvestmentStore.Type.RESGATE));
-        actions.add(contribution); actions.add(withdrawal); actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+        actions.add(create); actions.add(contribution); actions.add(withdrawal); actions.setAlignmentX(Component.LEFT_ALIGNMENT);
         actions.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         intro.add(explanation); intro.add(Box.createVerticalStrut(8)); intro.add(actions);
         content.add(intro); content.add(Box.createVerticalStrut(13));
@@ -969,10 +1011,93 @@ public final class OrcaBemApp extends JFrame {
         stats.add(statCard("APORTES ACUMULADOS", money(investmentStore.total(InvestmentStore.Type.APORTE)), "Acumulado aportado", ACCENT));
         stats.add(statCard("RESGATES ACUMULADOS", money(investmentStore.total(InvestmentStore.Type.RESGATE)), "Acumulado resgatado", PURPLE));
         content.add(stats); content.add(Box.createVerticalStrut(13));
+        content.add(investmentAccountsCard()); content.add(Box.createVerticalStrut(13));
         content.add(investmentChartCard()); content.add(Box.createVerticalStrut(13));
         content.add(investmentHistoryCard());
         JScrollPane scroll = new JScrollPane(content); scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false); scroll.getVerticalScrollBar().setUnitIncrement(18);
         page.add(scroll, BorderLayout.CENTER); return page;
+    }
+
+    private JPanel investmentAccountsCard() {
+        JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 9));
+        card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(15, 18, 14, 18)));
+        card.add(sectionHeading("Meus investimentos", "Saldo e meta opcional de cada investimento"), BorderLayout.NORTH);
+        JPanel rows = new JPanel(); rows.setOpaque(false); rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        if (investmentStore.investments().isEmpty()) {
+            rows.add(emptyMessage("Crie um investimento para começar a registrar aportes e resgates."));
+        } else {
+            for (InvestmentStore.Investment investment : investmentStore.investments()) {
+                BigDecimal balance = investmentStore.balance(investment.id());
+                JPanel row = new JPanel(new BorderLayout(12, 0)); row.setOpaque(false);
+                row.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER),
+                        BorderFactory.createEmptyBorder(8, 2, 8, 2)));
+                JPanel details = new JPanel(); details.setOpaque(false); details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
+                JLabel name = new JLabel(investment.name()); name.setFont(new Font("Segoe UI", Font.BOLD, 12)); name.setForeground(INK);
+                String goalText = investment.hasGoal()
+                        ? "Saldo " + money(balance) + "  ·  Meta " + money(investment.goal()) + "  ·  " + percent(balance, investment.goal()) + " concluída"
+                        : "Saldo " + money(balance) + "  ·  Sem meta definida";
+                JLabel summary = new JLabel(goalText); summary.setFont(new Font("Segoe UI", Font.PLAIN, 10)); summary.setForeground(MUTED);
+                details.add(name); details.add(Box.createVerticalStrut(4)); details.add(summary);
+                if (investment.hasGoal()) {
+                    double progress = balance.divide(investment.goal(), 4, RoundingMode.HALF_UP).doubleValue();
+                    JPanel track = progressTrack(progress, balance.compareTo(investment.goal()) >= 0 ? GREEN : ACCENT, 6);
+                    track.setMaximumSize(new Dimension(Integer.MAX_VALUE, 6)); details.add(Box.createVerticalStrut(6)); details.add(track);
+                }
+                JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0)); buttons.setOpaque(false);
+                JButton edit = secondaryButton("Editar"); edit.addActionListener(e -> investmentDialog(investment));
+                JButton remove = secondaryButton("Excluir"); remove.setEnabled(!investmentStore.hasMovements(investment.id()));
+                remove.setToolTipText(remove.isEnabled() ? "Excluir investimento vazio" : "Não é possível excluir: há movimentos associados");
+                remove.addActionListener(e -> removeInvestment(investment));
+                buttons.add(edit); buttons.add(remove); row.add(details, BorderLayout.CENTER); row.add(buttons, BorderLayout.EAST); rows.add(row);
+            }
+        }
+        JScrollPane scroll = new JScrollPane(rows); scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.setOpaque(false); scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(14); scroll.setPreferredSize(new Dimension(800, 210)); card.add(scroll, BorderLayout.CENTER);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280)); return card;
+    }
+
+    private void investmentDialog(InvestmentStore.Investment existing) {
+        boolean editing = existing != null;
+        JDialog dialog = new JDialog(this, editing ? "Editar investimento" : "Novo investimento", true);
+        dialog.setSize(500, 300); dialog.setLocationRelativeTo(this);
+        JPanel form = new JPanel(new GridLayout(0, 2, 12, 12)); form.setBackground(CARD); form.setBorder(BorderFactory.createEmptyBorder(22, 24, 14, 24));
+        JTextField name = new JTextField(editing ? existing.name() : ""); styleInput(name);
+        JTextField goal = new JTextField(editing && existing.hasGoal() ? existing.goal().toPlainString() : ""); styleInput(goal); installCurrencyFormatting(goal);
+        addField(form, "Nome do investimento", name); addField(form, "Meta de valor (opcional)", goal);
+        JLabel help = new JLabel("A meta representa o saldo que você deseja alcançar."); help.setForeground(MUTED); help.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        form.add(new JLabel("")); form.add(help);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8)); actions.setBackground(CARD);
+        JButton cancel = secondaryButton("Cancelar"); cancel.addActionListener(e -> dialog.dispose());
+        JButton save = primaryButton(editing ? "Salvar alterações" : "Criar investimento");
+        save.addActionListener(e -> {
+            try {
+                String cleanName = name.getText().strip();
+                BigDecimal parsedGoal = goal.getText().isBlank() ? BigDecimal.ZERO : parseMoney(goal.getText());
+                if (parsedGoal.signum() < 0) throw new IllegalArgumentException("A meta deve ser positiva ou zero.");
+                if (editing) investmentStore.updateInvestment(existing.id(), cleanName, parsedGoal);
+                else investmentStore.addInvestment(cleanName, parsedGoal);
+                dialog.dispose(); refreshPage();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage() == null ? "Confira os dados do investimento." : ex.getMessage(),
+                        "Não foi possível salvar", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        actions.add(cancel); actions.add(save); dialog.setLayout(new BorderLayout()); dialog.add(form, BorderLayout.CENTER); dialog.add(actions, BorderLayout.SOUTH); dialog.setVisible(true);
+        SwingUtilities.invokeLater(name::requestFocusInWindow);
+    }
+
+    private void removeInvestment(InvestmentStore.Investment investment) {
+        if (investmentStore.hasMovements(investment.id())) {
+            JOptionPane.showMessageDialog(this, "Este investimento tem movimentos associados e não pode ser excluído.", "Investimento em uso", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int answer = JOptionPane.showConfirmDialog(this, "Excluir o investimento '" + investment.name() + "'?", "Confirmar exclusão", JOptionPane.YES_NO_OPTION);
+        if (answer != JOptionPane.YES_OPTION) return;
+        try {
+            investmentStore.removeInvestment(investment.id());
+            if (investment.id().equals(selectedInvestmentId)) selectedInvestmentId = null;
+            refreshPage();
+        } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Não foi possível excluir: " + ex.getMessage(), "Erro", JOptionPane.WARNING_MESSAGE); }
     }
 
     private JPanel investmentChartCard() {
@@ -980,11 +1105,31 @@ public final class OrcaBemApp extends JFrame {
         card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(16, 18, 12, 18)));
         JPanel header = new JPanel(); header.setOpaque(false); header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.add(sectionHeading("Evolução do saldo investido", chartPeriodDescription(investmentRange, YearMonth.now())));
+        if (selectedInvestmentId != null && investmentStore.investment(selectedInvestmentId) == null) selectedInvestmentId = null;
+        List<InvestmentChoice> choices = new ArrayList<>(); choices.add(new InvestmentChoice("", "Todos os investimentos"));
+        investmentStore.investments().forEach(item -> choices.add(new InvestmentChoice(item.id(), item.name())));
+        JComboBox<InvestmentChoice> investmentFilter = new ThemeComboBox<>(choices.toArray(InvestmentChoice[]::new));
+        String selectedId = selectedInvestmentId == null ? "" : selectedInvestmentId;
+        choices.stream().filter(option -> option.id().equals(selectedId)).findFirst().ifPresent(investmentFilter::setSelectedItem);
+        investmentFilter.setPreferredSize(new Dimension(230, 30)); styleInput(investmentFilter);
+        investmentFilter.addActionListener(e -> {
+            Object selected = investmentFilter.getSelectedItem();
+            if (selected instanceof InvestmentChoice choice) {
+                String next = choice.id().isBlank() ? null : choice.id();
+                if (!java.util.Objects.equals(next, selectedInvestmentId)) { selectedInvestmentId = next; refreshPage(); }
+            }
+        });
+        JPanel filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 7, 2)); filterRow.setOpaque(false);
+        JLabel filterLabel = new JLabel("Investimento:"); filterLabel.setForeground(MUTED); filterLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        filterRow.add(filterLabel); filterRow.add(investmentFilter); filterRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        header.add(filterRow);
         JPanel controls = rangeControls(investmentRange, range -> { investmentRange = range; refreshPage(); });
         controls.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30)); controls.setAlignmentX(Component.LEFT_ALIGNMENT); header.add(controls);
         card.add(header, BorderLayout.NORTH);
         TrendChart chart = new TrendChart(); chart.setThemeColors(ACCENT, PURPLE, MUTED, BORDER, CARD);
-        chart.setData(investmentMonths(), month -> investmentStore.balanceAt(month.atEndOfMonth()));
+        chart.setData(investmentMonths(), month -> selectedInvestmentId == null
+                ? investmentStore.balanceAt(month.atEndOfMonth())
+                : investmentStore.balanceAt(selectedInvestmentId, month.atEndOfMonth()));
         card.add(chart, BorderLayout.CENTER);
         JLabel note = new JLabel("A visualização mostra o saldo calculado pelos aportes e resgates registrados; rentabilidade e preços de mercado não são estimados.");
         note.setFont(new Font("Segoe UI", Font.PLAIN, 10)); note.setForeground(MUTED); card.add(note, BorderLayout.SOUTH);
@@ -995,14 +1140,17 @@ public final class OrcaBemApp extends JFrame {
         JPanel card = cardPanel(); card.setLayout(new BorderLayout(0, 9));
         card.setBorder(BorderFactory.createCompoundBorder(card.getBorder(), BorderFactory.createEmptyBorder(15, 18, 15, 18)));
         card.add(sectionHeading("Histórico de investimentos", "Movimentos deste perfil"), BorderLayout.NORTH);
-        String[] columns = {"Data", "Movimento", "Origem", "Observação", "Valor", "Saldo após"};
+        String[] columns = {"Data", "Investimento", "Movimento", "Origem", "Observação", "Valor", "Saldo após"};
         DefaultTableModel model = new DefaultTableModel(columns, 0) { @Override public boolean isCellEditable(int row, int column) { return false; } };
         Map<String, BigDecimal> balancesAfter = investmentStore.balancesAfterEach();
-        for (InvestmentStore.Movement movement : investmentStore.movements()) {
+        List<InvestmentStore.Movement> displayed = investmentStore.movements();
+        for (InvestmentStore.Movement movement : displayed) {
             String signed = (movement.type() == InvestmentStore.Type.APORTE ? "+ " : "− ") + money(movement.amount());
-            model.addRow(new Object[]{movement.date().format(DATE_BR), movement.label(), movement.sourceLabel(), movement.note().isBlank() ? "—" : movement.note(), signed, money(balancesAfter.getOrDefault(movement.id(), BigDecimal.ZERO))});
+            model.addRow(new Object[]{movement.date().format(DATE_BR), investmentStore.investmentName(movement.investmentId()), movement.label(), movement.sourceLabel(),
+                    movement.note().isBlank() ? "—" : movement.note(), signed, money(balancesAfter.getOrDefault(movement.id(), BigDecimal.ZERO))});
         }
         JTable table = new JTable(model); table.setRowHeight(36); table.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setForeground(INK); table.setBackground(CARD); table.setGridColor(BORDER); table.setShowVerticalLines(false); table.setFillsViewportHeight(true);
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 10)); table.getTableHeader().setForeground(INK); table.getTableHeader().setBackground(CARD_ALT); table.getTableHeader().setPreferredSize(new Dimension(0, 34));
         table.getTableHeader().setDefaultRenderer((source, value, selected, focused, row, column) -> {
@@ -1011,45 +1159,91 @@ public final class OrcaBemApp extends JFrame {
         });
         JScrollPane scroll = new JScrollPane(table); scroll.setBorder(BorderFactory.createLineBorder(BORDER)); scroll.setBackground(CARD); scroll.getViewport().setBackground(CARD);
         card.add(scroll, BorderLayout.CENTER);
-        if (model.getRowCount() == 0) card.add(emptyMessage("Nenhum aporte ou resgate registrado neste perfil."), BorderLayout.SOUTH);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
+        JButton edit = secondaryButton("Editar selecionado"); edit.setEnabled(false);
+        JButton remove = secondaryButton("Remover selecionado"); remove.setEnabled(false);
+        table.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) { boolean selected = table.getSelectedRow() >= 0; edit.setEnabled(selected); remove.setEnabled(selected); }
+        });
+        edit.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row >= 0) {
+                InvestmentStore.Movement movement = displayed.get(table.convertRowIndexToModel(row));
+                investmentMovementDialog(movement.type(), movement);
+            }
+        });
+        remove.addActionListener(e -> {
+            int row = table.getSelectedRow(); if (row < 0) return;
+            InvestmentStore.Movement movement = displayed.get(table.convertRowIndexToModel(row));
+            int answer = JOptionPane.showConfirmDialog(this, "Remover o " + movement.label().toLowerCase(PT) + " de " + money(movement.amount())
+                    + " de '" + investmentStore.investmentName(movement.investmentId()) + "'?", "Confirmar remoção", JOptionPane.YES_NO_OPTION);
+            if (answer != JOptionPane.YES_OPTION) return;
+            try { investmentStore.removeMovement(movement.id()); refreshPage(); }
+            catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage(), "Não foi possível remover", JOptionPane.WARNING_MESSAGE); }
+        });
+        actions.add(edit); actions.add(remove); card.add(actions, BorderLayout.SOUTH);
         card.setPreferredSize(new Dimension(800, 280)); card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 340)); return card;
     }
 
     private void investmentMovementDialog(InvestmentStore.Type movementType) {
+        investmentMovementDialog(movementType, null);
+    }
+
+    private void investmentMovementDialog(InvestmentStore.Type movementType, InvestmentStore.Movement existing) {
+        if (investmentStore.investments().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Crie um investimento antes de registrar um aporte ou resgate.", "Nenhum investimento cadastrado", JOptionPane.INFORMATION_MESSAGE);
+            investmentDialog(null); return;
+        }
+        boolean editing = existing != null;
         boolean contribution = movementType == InvestmentStore.Type.APORTE;
         String actionName = contribution ? "Aporte" : "Resgate";
-        JDialog dialog = new JDialog(this, "Registrar " + actionName.toLowerCase(PT), true); dialog.setSize(500, contribution ? 390 : 340); dialog.setLocationRelativeTo(this);
+        JDialog dialog = new JDialog(this, (editing ? "Editar " : "Registrar ") + actionName.toLowerCase(PT), true);
+        dialog.setSize(520, contribution ? 450 : 400); dialog.setLocationRelativeTo(this);
         JPanel form = new JPanel(new GridLayout(0, 2, 12, 12)); form.setBackground(CARD); form.setBorder(BorderFactory.createEmptyBorder(22, 24, 14, 24));
-        JTextField date = new JTextField(LocalDate.now().format(DATE_BR)); styleInput(date); installDateInputFilter(date);
-        JTextField amount = new JTextField(); styleInput(amount); installCurrencyFormatting(amount);
-        JTextField note = new JTextField(); styleInput(note);
-        javax.swing.JComboBox<String> source = contribution ? new ThemeComboBox<>(new String[]{"Receita registrada", "Aporte externo (não é receita)"}) : null;
+        JTextField date = new JTextField((editing ? existing.date() : LocalDate.now()).format(DATE_BR)); styleInput(date); installDateInputFilter(date);
+        JTextField amount = new JTextField(editing ? existing.amount().toPlainString() : ""); styleInput(amount); installCurrencyFormatting(amount);
+        JTextField note = new JTextField(editing ? existing.note() : ""); styleInput(note);
+        JComboBox<InvestmentStore.Investment> investment = new ThemeComboBox<>(investmentStore.investments().toArray(InvestmentStore.Investment[]::new));
+        InvestmentStore.Investment initialInvestment = editing ? investmentStore.investment(existing.investmentId())
+                : selectedInvestmentId == null ? null : investmentStore.investment(selectedInvestmentId);
+        if (initialInvestment == null && !investmentStore.investments().isEmpty()) initialInvestment = investmentStore.investments().get(0);
+        if (initialInvestment != null) investment.setSelectedItem(initialInvestment);
+        styleInput(investment);
+        JComboBox<String> source = contribution ? new ThemeComboBox<>(new String[]{"Receita registrada", "Aporte externo (não é receita)"}) : null;
         if (source != null) styleInput(source);
-        addField(form, "Data (dd/MM/aaaa)", date); addField(form, "Valor (R$)", amount);
+        if (source != null && editing && existing.source() == InvestmentStore.Source.EXTERNO) source.setSelectedIndex(1);
+        addField(form, "Investimento", investment); addField(form, "Data (dd/MM/aaaa)", date); addField(form, "Valor (R$)", amount);
         if (contribution) addField(form, "Origem do aporte", source);
         addField(form, "Observação (opcional)", note);
-        JLabel help = new JLabel(contribution ? "Será descontado das receitas registradas neste mês." : "O resgate não pode superar o saldo disponível.");
+        JLabel help = new JLabel(!contribution ? "O resgate não pode superar o saldo disponível."
+                : source.getSelectedIndex() == 0 ? "Será descontado das receitas registradas neste mês." : "Aporte externo: não altera o total de receitas.");
         if (contribution) source.addActionListener(e -> help.setText(source.getSelectedIndex() == 0
                 ? "Será descontado das receitas registradas neste mês."
                 : "Aporte externo: não altera o total de receitas."));
         help.setForeground(MUTED); help.setFont(new Font("Segoe UI", Font.PLAIN, 10)); form.add(new JLabel("")); form.add(help);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8)); buttons.setBackground(CARD);
         JButton cancel = secondaryButton("Cancelar"); cancel.addActionListener(e -> dialog.dispose());
-        JButton save = primaryButton("Salvar " + actionName.toLowerCase(PT));
+        JButton save = primaryButton(editing ? "Salvar alterações" : "Salvar " + actionName.toLowerCase(PT));
         save.addActionListener(e -> {
             try {
                 LocalDate parsedDate = LocalDate.parse(date.getText().trim(), DATE_BR);
                 BigDecimal parsedAmount = parseMoney(amount.getText());
                 if (parsedAmount.signum() <= 0) throw new IllegalArgumentException("Digite um valor maior que zero.");
+                InvestmentStore.Investment chosenInvestment = (InvestmentStore.Investment) investment.getSelectedItem();
+                if (chosenInvestment == null) throw new IllegalArgumentException("Selecione um investimento.");
                 InvestmentStore.Source selectedSource = contribution && source.getSelectedIndex() == 0
                         ? InvestmentStore.Source.RECEITA : InvestmentStore.Source.EXTERNO;
                 if (selectedSource == InvestmentStore.Source.RECEITA) {
                     YearMonth month = YearMonth.from(parsedDate);
-                    BigDecimal availableIncome = recordedIncome(month).subtract(investmentStore.incomeFundedContributions(month));
+                    BigDecimal alreadyAllocated = investmentStore.incomeFundedContributions(month);
+                    if (editing && existing.type() == InvestmentStore.Type.APORTE && existing.source() == InvestmentStore.Source.RECEITA
+                            && YearMonth.from(existing.date()).equals(month)) alreadyAllocated = alreadyAllocated.subtract(existing.amount());
+                    BigDecimal availableIncome = recordedIncome(month).subtract(alreadyAllocated);
                     if (parsedAmount.compareTo(availableIncome) > 0)
                         throw new IllegalArgumentException("O aporte excede as receitas registradas ainda disponíveis neste mês (" + money(availableIncome.max(BigDecimal.ZERO)) + "). Escolha aporte externo se o valor veio de outra fonte.");
                 }
-                investmentStore.add(parsedDate, movementType, parsedAmount, note.getText(), selectedSource);
+                if (editing) investmentStore.updateMovement(existing.id(), parsedDate, movementType, parsedAmount, note.getText(), selectedSource, chosenInvestment.id());
+                else investmentStore.add(parsedDate, movementType, parsedAmount, note.getText(), selectedSource, chosenInvestment.id());
                 dialog.dispose(); refreshPage();
             } catch (Exception ex) {
                 String message = ex.getMessage() == null ? "Confira a data e o valor." : ex.getMessage();
@@ -1057,7 +1251,7 @@ public final class OrcaBemApp extends JFrame {
             }
         });
         buttons.add(cancel); buttons.add(save); dialog.setLayout(new BorderLayout()); dialog.add(form, BorderLayout.CENTER); dialog.add(buttons, BorderLayout.SOUTH); dialog.setVisible(true);
-        SwingUtilities.invokeLater(amount::requestFocusInWindow);
+        SwingUtilities.invokeLater(editing ? amount::requestFocusInWindow : investment::requestFocusInWindow);
     }
 
     private JPanel buildPrivacyPage() {
@@ -1065,7 +1259,7 @@ public final class OrcaBemApp extends JFrame {
         JPanel content = new JPanel(); content.setOpaque(false); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         JPanel privacyCard = cardPanel(); privacyCard.setLayout(new BoxLayout(privacyCard, BoxLayout.Y_AXIS));
         privacyCard.setBorder(BorderFactory.createCompoundBorder(privacyCard.getBorder(), BorderFactory.createEmptyBorder(22, 24, 22, 24))); privacyCard.setAlignmentX(Component.LEFT_ALIGNMENT); privacyCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 360));
-        JLabel badge = new JLabel("●  ARMAZENAMENTO LOCAL"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(GREEN);
+        JLabel badge = new JLabel("●  ARMAZENAMENTO LOCAL"); badge.setFont(new Font("Segoe UI", Font.BOLD, 10)); badge.setForeground(ACCENT);
         JLabel heading = new JLabel("Seus dados ficam com você."); heading.setFont(new Font("Segoe UI", Font.BOLD, 19)); heading.setForeground(INK);
         JLabel explanation = new JLabel("<html><div style='width:760px'>Os dados do perfil ativo ficam neste computador, em uma pasta separada. Não é necessária uma conta e os dados não são enviados a um servidor.</div></html>"); explanation.setFont(new Font("Segoe UI", Font.PLAIN, 12)); explanation.setForeground(MUTED);
         badge.setAlignmentX(Component.LEFT_ALIGNMENT); heading.setAlignmentX(Component.LEFT_ALIGNMENT); explanation.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1239,7 +1433,9 @@ public final class OrcaBemApp extends JFrame {
             JPanel row = new JPanel(new BorderLayout(10, 0)); row.setOpaque(false); row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 63)); row.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER));
             JLabel name = new JLabel(category); name.setFont(new Font("Segoe UI", Font.PLAIN, 13)); name.setForeground(INK);
             BigDecimal spent = spentByCategory.getOrDefault(category, BigDecimal.ZERO); BigDecimal limit = currentBudgets.getOrDefault(category, BigDecimal.ZERO);
-            String usageText = limit.signum() > 0 ? percent(spent, limit) + " usado · " + money(spent) : money(spent) + " gastos · sem limite";
+            String usageText = limit.signum() > 0
+                    ? "Gasto " + money(spent) + " · Limite " + money(limit) + " · Restante " + money(limit.subtract(spent))
+                    : money(spent) + " gastos · sem limite";
             JLabel usage = new JLabel(usageText); usage.setFont(new Font("Segoe UI", Font.PLAIN, 10)); usage.setForeground(limit.signum() > 0 && spent.compareTo(limit) > 0 ? RED : MUTED);
             JPanel categoryCopy = new JPanel(); categoryCopy.setOpaque(false); categoryCopy.setLayout(new BoxLayout(categoryCopy, BoxLayout.Y_AXIS)); categoryCopy.add(name); categoryCopy.add(Box.createVerticalStrut(3)); categoryCopy.add(usage);
             JTextField field = new JTextField(currentBudgets.containsKey(category) ? currentBudgets.get(category).toPlainString() : ""); field.setHorizontalAlignment(SwingConstants.RIGHT); field.setPreferredSize(new Dimension(170, 33)); field.setFont(new Font("Segoe UI", Font.PLAIN, 12)); styleInput(field); installCurrencyFormatting(field); fields.put(category, field);
@@ -1249,15 +1445,16 @@ public final class OrcaBemApp extends JFrame {
         }
         JScrollPane scroll = new JScrollPane(form); scroll.setBorder(BorderFactory.createLineBorder(BORDER)); scroll.setBackground(CARD); scroll.getViewport().setBackground(CARD); page.add(scroll, BorderLayout.CENTER);
         JPanel footer = new JPanel(new BorderLayout()); footer.setOpaque(false);
-        BigDecimal assigned = currentBudgets.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal currentSpent = total(selectedMonth, Transaction.Type.EXPENSE);
-        JLabel sum = new JLabel("Planejado: " + money(assigned) + "   ·   Gasto: " + money(currentSpent) + "   ·   Restante: " + money(assigned.subtract(currentSpent))); sum.setFont(new Font("Segoe UI", Font.BOLD, 12)); sum.setForeground(INK);
+        JLabel sum = new JLabel(budgetSummary(currentBudgets, spentByCategory)); sum.setFont(new Font("Segoe UI", Font.BOLD, 12)); sum.setForeground(INK);
         Runnable updateTotal = () -> {
-            BigDecimal total = BigDecimal.ZERO;
-            for (JTextField field : fields.values()) {
-                if (!field.getText().trim().isEmpty()) try { total = total.add(parseMoney(field.getText())); } catch (NumberFormatException ignored) { }
+            Map<String, BigDecimal> enteredBudgets = new LinkedHashMap<>();
+            for (Map.Entry<String, JTextField> entry : fields.entrySet()) {
+                if (!entry.getValue().getText().trim().isEmpty()) try {
+                    BigDecimal value = parseMoney(entry.getValue().getText());
+                    if (value.signum() > 0) enteredBudgets.put(entry.getKey(), value);
+                } catch (NumberFormatException ignored) { }
             }
-            sum.setText("Planejado: " + money(total) + "   ·   Gasto: " + money(currentSpent) + "   ·   Restante: " + money(total.subtract(currentSpent)));
+            sum.setText(budgetSummary(enteredBudgets, spentByCategory));
         };
         fields.values().forEach(field -> field.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { updateTotal.run(); }
@@ -1482,6 +1679,23 @@ public final class OrcaBemApp extends JFrame {
         return map;
     }
 
+    private static BigDecimal budgetedExpense(Map<String, BigDecimal> budgets, Map<String, BigDecimal> spentByCategory) {
+        return budgets.entrySet().stream().filter(entry -> entry.getValue() != null && entry.getValue().signum() > 0)
+                .map(entry -> spentByCategory.getOrDefault(entry.getKey(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static BigDecimal budgetRemaining(Map<String, BigDecimal> budgets, Map<String, BigDecimal> spentByCategory) {
+        return budgets.entrySet().stream().filter(entry -> entry.getValue() != null && entry.getValue().signum() > 0)
+                .map(entry -> entry.getValue().subtract(spentByCategory.getOrDefault(entry.getKey(), BigDecimal.ZERO)))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private String budgetSummary(Map<String, BigDecimal> budgets, Map<String, BigDecimal> spentByCategory) {
+        BigDecimal assigned = budgets.values().stream().filter(value -> value != null && value.signum() > 0).reduce(BigDecimal.ZERO, BigDecimal::add);
+        String remaining = budgets.isEmpty() ? "—" : money(budgetRemaining(budgets, spentByCategory));
+        return "Limites: " + money(assigned) + "   ·   Gasto limitado: " + money(budgetedExpense(budgets, spentByCategory)) + "   ·   Restante: " + remaining;
+    }
+
     private JPanel sectionHeading(String title, String subtitle) {
         JPanel panel = new JPanel(); panel.setOpaque(false); panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         JLabel h = new JLabel(title); h.setFont(new Font("Segoe UI", Font.BOLD, 14)); h.setForeground(INK);
@@ -1536,11 +1750,11 @@ public final class OrcaBemApp extends JFrame {
                 }
             });
             if (combo.isEditable() && combo.getEditor().getEditorComponent() instanceof javax.swing.text.JTextComponent editor) {
-                editor.setOpaque(false); editor.setBackground(CARD_ALT); editor.setForeground(INK); editor.setCaretColor(GREEN); editor.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
+                editor.setOpaque(false); editor.setBackground(CARD_ALT); editor.setForeground(INK); editor.setCaretColor(ACCENT); editor.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
             }
         }
         input.setBorder(BorderFactory.createCompoundBorder(new javax.swing.border.LineBorder(BORDER, 1, true), BorderFactory.createEmptyBorder(5, 9, 5, 9)));
-        if (input instanceof javax.swing.text.JTextComponent text) text.setCaretColor(GREEN);
+        if (input instanceof javax.swing.text.JTextComponent text) text.setCaretColor(ACCENT);
     }
 
     private String money(BigDecimal amount) {
